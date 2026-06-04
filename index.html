@@ -672,7 +672,7 @@
       </div>
 
       <div class="notice">
-        Versão 1.7: envia notificação push pela API da Vercel quando uma mensagem é enviada.
+        Versão 1.8: mostra o erro técnico real ao ativar notificações.
       </div>
     </div>
   </div>
@@ -1255,7 +1255,7 @@
         </div>
 
         <p class="hint">
-          Clique em “Ativar notificações”. Depois confira no Firebase se apareceu o campo pushTokens dentro do seu usuário.
+          Se der erro, esta versão vai mostrar o código técnico exato para corrigirmos.
         </p>
       </div>
 
@@ -1595,7 +1595,7 @@
     try {
       const notification = new Notification("Nova mensagem de " + (contact.name || "Contato"), {
         body: contact.lastMessage || "Você recebeu uma nova mensagem.",
-        icon: "icon-192.png",
+        icon: "/icon-192.png",
         tag: "zappi-message"
       });
 
@@ -1608,17 +1608,22 @@
 
   async function requestNotificationPermission() {
     if (!firebaseReady || !db || !currentUser) {
-      alert("Aguarde o Firebase conectar e tente novamente.");
+      alert("Firebase ainda não conectou. Aguarde alguns segundos e tente de novo.");
       return;
     }
 
     if (!("Notification" in window)) {
-      alert("Este navegador não suporta notificações.");
+      alert("Erro técnico: Notification não existe neste navegador.");
+      return;
+    }
+
+    if (!("serviceWorker" in navigator)) {
+      alert("Erro técnico: Service Worker não existe neste navegador.");
       return;
     }
 
     if (!messaging) {
-      alert("Este navegador não suporta Firebase Messaging. Teste no Chrome Android.");
+      alert("Erro técnico: Firebase Messaging não foi carregado neste navegador.");
       return;
     }
 
@@ -1626,19 +1631,23 @@
       const permission = await Notification.requestPermission();
 
       if (permission !== "granted") {
-        alert("A permissão de notificação não foi ativada.");
+        alert("Permissão não liberada. Status: " + permission);
         return;
       }
 
-      const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js");
+      const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js?v=22", {
+        scope: "/"
+      });
+
+      await navigator.serviceWorker.ready;
 
       const token = await messaging.getToken({
-        vapidKey,
+        vapidKey: vapidKey,
         serviceWorkerRegistration: registration
       });
 
       if (!token) {
-        alert("Não foi possível gerar o token deste aparelho.");
+        alert("Erro técnico: o Firebase não retornou token.");
         return;
       }
 
@@ -1655,13 +1664,22 @@
 
       new Notification("Zappi Web ativado", {
         body: "Este aparelho agora está pronto para receber notificações.",
-        icon: "icon-192.png"
+        icon: "/icon-192.png"
       });
 
-      alert("Notificações ativadas neste aparelho.");
+      alert("Notificações ativadas com sucesso neste aparelho.");
+
     } catch (error) {
-      console.error("Erro ao ativar notificações:", error);
-      alert("Erro ao ativar notificações. Veja se está usando Chrome e se o site está em HTTPS.");
+      console.error("ERRO DETALHADO AO ATIVAR NOTIFICAÇÕES:", error);
+
+      const code = error.code || "sem código";
+      const message = error.message || "sem mensagem";
+
+      alert(
+        "Erro técnico ao ativar notificações:\n\n" +
+        "Código: " + code + "\n\n" +
+        "Mensagem: " + message
+      );
     }
   }
 
