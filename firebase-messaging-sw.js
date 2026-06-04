@@ -13,13 +13,30 @@ firebase.initializeApp({
 const messaging = firebase.messaging();
 
 messaging.onBackgroundMessage((payload) => {
-  const title = payload.notification?.title || "Nova mensagem no Zappi Web";
+  const title =
+    payload.notification?.title ||
+    payload.data?.title ||
+    "Nova mensagem no Zappi Web";
+
+  const body =
+    payload.notification?.body ||
+    payload.data?.body ||
+    "Você recebeu uma nova mensagem.";
+
+  const url =
+    payload.data?.url ||
+    payload.fcmOptions?.link ||
+    "/";
+
   const options = {
-    body: payload.notification?.body || "Você recebeu uma nova mensagem.",
+    body,
     icon: "/icon-192.png",
     badge: "/icon-192.png",
+    tag: "zappi-message",
+    renotify: true,
+    requireInteraction: false,
     data: {
-      url: payload.data?.url || "/"
+      url
     }
   };
 
@@ -29,17 +46,33 @@ messaging.onBackgroundMessage((payload) => {
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
 
-  const urlToOpen = event.notification.data?.url || "/";
+  const rawUrl = event.notification?.data?.url || "/";
+  const urlToOpen = new URL(rawUrl, self.location.origin).href;
 
   event.waitUntil(
     clients.matchAll({
       type: "window",
       includeUncontrolled: true
-    }).then((clientList) => {
+    }).then(async (clientList) => {
       for (const client of clientList) {
-        if ("focus" in client) {
-          client.focus();
-          return;
+        const clientUrl = new URL(client.url);
+
+        if (clientUrl.origin === self.location.origin) {
+          if ("navigate" in client) {
+            const navigatedClient = await client.navigate(urlToOpen);
+            if (navigatedClient && "focus" in navigatedClient) {
+              return navigatedClient.focus();
+            }
+          }
+
+          if ("focus" in client) {
+            client.postMessage({
+              type: "OPEN_CHAT_FROM_NOTIFICATION",
+              url: rawUrl
+            });
+
+            return client.focus();
+          }
         }
       }
 
