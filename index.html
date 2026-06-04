@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 
   <title>Zappi Web</title>
 
@@ -22,21 +22,30 @@
       font-family: Arial, Helvetica, sans-serif;
     }
 
-    body {
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
       background: #d9fdd3;
-      min-height: 100vh;
       color: #111;
+    }
+
+    body {
+      padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
     }
 
     .app {
       width: 100%;
       max-width: 480px;
-      min-height: 100vh;
+      height: 100dvh;
+      min-height: 100dvh;
       margin: 0 auto;
       background: #f4f7f5;
       display: flex;
       flex-direction: column;
       box-shadow: 0 0 25px rgba(0,0,0,0.2);
+      overflow: hidden;
+      position: relative;
     }
 
     .topbar {
@@ -46,6 +55,7 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
+      flex-shrink: 0;
     }
 
     .brand {
@@ -76,7 +86,8 @@
     .screen {
       display: none;
       flex: 1;
-      overflow: auto;
+      overflow: hidden;
+      min-height: 0;
     }
 
     .screen.active {
@@ -89,6 +100,9 @@
       display: flex;
       flex-direction: column;
       gap: 18px;
+      overflow-y: auto;
+      flex: 1;
+      min-height: 0;
     }
 
     .hero {
@@ -132,7 +146,7 @@
       border: 1px solid #d7d7d7;
       border-radius: 14px;
       outline: none;
-      font-size: 15px;
+      font-size: 16px;
       background: #fff;
     }
 
@@ -185,6 +199,7 @@
       display: flex;
       background: #075E54;
       color: white;
+      flex-shrink: 0;
     }
 
     .tab {
@@ -206,7 +221,8 @@
     .content {
       padding: 14px;
       flex: 1;
-      overflow: auto;
+      overflow-y: auto;
+      min-height: 0;
     }
 
     .profile-box {
@@ -281,10 +297,6 @@
       position: relative;
     }
 
-    .contact-item:hover {
-      background: #f8fffd;
-    }
-
     .contact-main {
       flex: 1;
       min-width: 0;
@@ -346,6 +358,7 @@
       display: flex;
       align-items: center;
       gap: 10px;
+      flex-shrink: 0;
     }
 
     .back {
@@ -389,6 +402,7 @@
       justify-content: space-between;
       gap: 10px;
       font-size: 12px;
+      flex-shrink: 0;
     }
 
     .chat-save-bar.active {
@@ -407,11 +421,13 @@
     .chat-body {
       flex: 1;
       padding: 14px;
-      overflow: auto;
+      overflow-y: auto;
       background: #efeae2;
       display: flex;
       flex-direction: column;
       gap: 8px;
+      min-height: 0;
+      -webkit-overflow-scrolling: touch;
     }
 
     .msg {
@@ -446,15 +462,18 @@
 
     .chat-input {
       background: #f0f2f5;
-      padding: 10px;
+      padding: 10px 10px calc(10px + env(safe-area-inset-bottom));
       display: flex;
       gap: 8px;
       align-items: center;
+      flex-shrink: 0;
+      border-top: 1px solid rgba(0,0,0,0.08);
     }
 
     .chat-input input {
       border-radius: 22px;
       padding: 13px 15px;
+      font-size: 16px;
     }
 
     .send-btn {
@@ -465,6 +484,9 @@
       color: white;
       font-size: 18px;
       flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
 
     .install-box {
@@ -519,11 +541,81 @@
       text-transform: uppercase;
       letter-spacing: .4px;
     }
+
+    .in-app-toast {
+      position: absolute;
+      top: 14px;
+      left: 14px;
+      right: 14px;
+      z-index: 999;
+      background: #075E54;
+      color: white;
+      padding: 13px 14px;
+      border-radius: 16px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.25);
+      display: none;
+      align-items: center;
+      gap: 10px;
+      cursor: pointer;
+      animation: slideDown .25s ease-out;
+    }
+
+    .in-app-toast.active {
+      display: flex;
+    }
+
+    .toast-avatar {
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      background: #128C7E;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 900;
+      flex-shrink: 0;
+    }
+
+    .toast-text {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .toast-text strong {
+      display: block;
+      font-size: 14px;
+      margin-bottom: 2px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .toast-text span {
+      display: block;
+      font-size: 12px;
+      opacity: .9;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    @keyframes slideDown {
+      from { transform: translateY(-15px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
   </style>
 </head>
 <body>
 
 <div class="app">
+
+  <div id="inAppToast" class="in-app-toast" onclick="openToastConversation()">
+    <div class="toast-avatar" id="toastAvatar">Z</div>
+    <div class="toast-text">
+      <strong id="toastTitle">Nova mensagem</strong>
+      <span id="toastBody">Toque para abrir</span>
+    </div>
+  </div>
 
   <div id="registerScreen" class="screen active">
     <div class="topbar">
@@ -558,7 +650,7 @@
       </div>
 
       <div class="notice">
-        Versão 1.2: conversas recebidas, aviso de nova mensagem, som com app aberto e botão para salvar contato.
+        Versão 1.3: campo de digitar corrigido, aviso visual de nova mensagem e notificação simples com app aberto.
       </div>
     </div>
   </div>
@@ -628,6 +720,9 @@
   let lastActiveMessageId = "";
   let activeTabName = "chats";
   let knownConversationUpdates = {};
+  let toastConversation = null;
+  let toastTimer = null;
+  let firstConversationSnapshot = true;
 
   const localKey = "zappi_web_v1_data";
 
@@ -774,10 +869,12 @@
     if (tab === "profile") tabElements[2].classList.add("active");
 
     if (tab === "chats") renderChats();
+
     if (tab === "contacts") {
       stopConversationListener();
       renderContacts();
     }
+
     if (tab === "profile") {
       stopConversationListener();
       renderProfile();
@@ -1047,6 +1144,7 @@
 
   function listenConversations() {
     stopConversationListener();
+    firstConversationSnapshot = true;
 
     conversationsUnsubscribe = db.collection("conversations")
       .where("participants", "array-contains", currentUser.id)
@@ -1055,25 +1153,11 @@
 
         convs.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
 
-        for (const conv of convs) {
-          const previousUpdate = knownConversationUpdates[conv.docId];
-
-          if (
-            previousUpdate &&
-            conv.updatedAt &&
-            conv.updatedAt !== previousUpdate &&
-            conv.lastSenderId &&
-            conv.lastSenderId !== currentUser.id
-          ) {
-            playMessageSound();
-          }
-
-          knownConversationUpdates[conv.docId] = conv.updatedAt || 0;
-        }
-
         const items = [];
 
         for (const conv of convs) {
+          const previousUpdate = knownConversationUpdates[conv.docId];
+
           const otherId = (conv.participants || []).find(id => id !== currentUser.id);
           if (!otherId) continue;
 
@@ -1088,12 +1172,7 @@
             return cId === otherId;
           });
 
-          const unread =
-            conv.lastSenderId &&
-            conv.lastSenderId !== currentUser.id &&
-            (conv.updatedAt || 0) > lastRead;
-
-          items.push({
+          const item = {
             name: contact?.savedName || contact?.name || otherUser?.name || fallback.name || "Contato",
             phone: contact?.phone || otherUser?.phone || fallback.phone || "",
             contactUserId: otherId,
@@ -1101,9 +1180,29 @@
             lastMessage: conv.lastMessage || "Toque para conversar",
             timeText: formatTime(conv.updatedAt),
             fromConversation: true,
-            unread
-          });
+            unread:
+              conv.lastSenderId &&
+              conv.lastSenderId !== currentUser.id &&
+              (conv.updatedAt || 0) > lastRead
+          };
+
+          items.push(item);
+
+          if (
+            !firstConversationSnapshot &&
+            previousUpdate &&
+            conv.updatedAt &&
+            conv.updatedAt !== previousUpdate &&
+            conv.lastSenderId &&
+            conv.lastSenderId !== currentUser.id
+          ) {
+            playIncomingAlert(item);
+          }
+
+          knownConversationUpdates[conv.docId] = conv.updatedAt || 0;
         }
+
+        firstConversationSnapshot = false;
 
         const list = document.getElementById("conversationList");
         if (!list) return;
@@ -1139,7 +1238,7 @@
         </div>
 
         <p class="hint">
-          As notificações do navegador já podem ser permitidas. A próxima etapa será conectar push notification para avisar com o app fechado.
+          Esta etapa permite notificações do navegador. A próxima etapa será push notification com o app fechado.
         </p>
       </div>
 
@@ -1172,6 +1271,7 @@
     lastActiveMessageId = "";
 
     stopConversationListener();
+    hideToast();
     await loadContacts();
 
     document.getElementById("homeScreen").classList.remove("active");
@@ -1241,7 +1341,12 @@
               newest.id !== lastActiveMessageId &&
               newest.senderId !== currentUser.id
             ) {
-              playMessageSound();
+              playIncomingAlert({
+                name: newest.senderName || activeChat.name || "Contato",
+                lastMessage: newest.text || "Nova mensagem",
+                contactUserId: newest.senderId,
+                phone: activeChat.phone || ""
+              });
               markConversationAsRead();
             }
 
@@ -1276,7 +1381,9 @@
       `;
     }).join("");
 
-    chatBody.scrollTop = chatBody.scrollHeight;
+    setTimeout(() => {
+      chatBody.scrollTop = chatBody.scrollHeight;
+    }, 50);
   }
 
   async function sendMessage() {
@@ -1377,6 +1484,62 @@
     } catch (e) {}
   }
 
+  function playIncomingAlert(contact) {
+    playMessageSound();
+    showToast(contact);
+    showBrowserNotification(contact);
+  }
+
+  function showToast(contact) {
+    toastConversation = contact;
+
+    const toast = document.getElementById("inAppToast");
+    const title = document.getElementById("toastTitle");
+    const body = document.getElementById("toastBody");
+    const avatar = document.getElementById("toastAvatar");
+
+    title.innerText = "Nova mensagem de " + (contact.name || "Contato");
+    body.innerText = contact.lastMessage || "Toque para abrir";
+    avatar.innerText = initials(contact.name || "Z");
+
+    toast.classList.add("active");
+
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => {
+      hideToast();
+    }, 5000);
+  }
+
+  function hideToast() {
+    const toast = document.getElementById("inAppToast");
+    toast.classList.remove("active");
+    clearTimeout(toastTimer);
+  }
+
+  function openToastConversation() {
+    if (toastConversation) {
+      openChat(toastConversation);
+    }
+  }
+
+  function showBrowserNotification(contact) {
+    if (!("Notification" in window)) return;
+    if (Notification.permission !== "granted") return;
+
+    try {
+      const notification = new Notification("Nova mensagem de " + (contact.name || "Contato"), {
+        body: contact.lastMessage || "Você recebeu uma nova mensagem.",
+        icon: "icon-192.png",
+        tag: "zappi-message"
+      });
+
+      notification.onclick = () => {
+        window.focus();
+        openChat(contact);
+      };
+    } catch (e) {}
+  }
+
   async function requestNotificationPermission() {
     if (!("Notification" in window)) {
       alert("Este navegador não suporta notificações.");
@@ -1462,6 +1625,15 @@
 
     if (el) {
       el.innerText = "Offline";
+    }
+  });
+
+  window.addEventListener("resize", () => {
+    const chatBody = document.getElementById("chatBody");
+    if (chatBody) {
+      setTimeout(() => {
+        chatBody.scrollTop = chatBody.scrollHeight;
+      }, 150);
     }
   });
 
