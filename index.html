@@ -12,6 +12,7 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.4/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.4/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.4/firebase-messaging-compat.js"></script>
 
   <style>
     * {
@@ -671,7 +672,7 @@
       </div>
 
       <div class="notice">
-        Versão 1.5: chat com topo fixo, mensagens roláveis e caixa de digitar fixa embaixo.
+        Versão 1.6: salva o token de notificação do celular no Firebase.
       </div>
     </div>
   </div>
@@ -729,9 +730,12 @@
     appId: "1:675790989502:web:36a7f3d1bcbb3bfb1b96ef"
   };
 
+  const vapidKey = "BA7KFMlXJcz-8sBVw5FF5DECQtqfIQiTHdu2rBeXeZmAvONaPiwo3ybA8nKngN1aZUp_hLSBA9i7h7lYjRuN9Fc";
+
   let firebaseReady = false;
   let db = null;
   let auth = null;
+  let messaging = null;
   let currentUser = null;
   let contacts = [];
   let activeChat = null;
@@ -767,6 +771,14 @@
       auth = firebase.auth();
       db = firebase.firestore();
       await auth.signInAnonymously();
+
+      try {
+        messaging = firebase.messaging();
+      } catch (err) {
+        messaging = null;
+        console.warn("Messaging não suportado neste navegador:", err);
+      }
+
       firebaseReady = true;
       document.getElementById("firebaseStatus").innerText = "Firebase";
     } catch (error) {
@@ -1242,7 +1254,9 @@
           <button class="btn-danger" onclick="logout()">Sair</button>
         </div>
 
-        <p class="hint">A próxima etapa será push notification com o app fechado.</p>
+        <p class="hint">
+          Clique em “Ativar notificações”. Depois confira no Firebase se apareceu o campo pushTokens dentro do seu usuário.
+        </p>
       </div>
 
       <br>
@@ -1550,20 +1564,61 @@
   }
 
   async function requestNotificationPermission() {
+    if (!firebaseReady || !db || !currentUser) {
+      alert("Aguarde o Firebase conectar e tente novamente.");
+      return;
+    }
+
     if (!("Notification" in window)) {
       alert("Este navegador não suporta notificações.");
       return;
     }
 
-    const permission = await Notification.requestPermission();
+    if (!messaging) {
+      alert("Este navegador não suporta Firebase Messaging. Teste no Chrome Android.");
+      return;
+    }
 
-    if (permission === "granted") {
+    try {
+      const permission = await Notification.requestPermission();
+
+      if (permission !== "granted") {
+        alert("A permissão de notificação não foi ativada.");
+        return;
+      }
+
+      const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js");
+
+      const token = await messaging.getToken({
+        vapidKey,
+        serviceWorkerRegistration: registration
+      });
+
+      if (!token) {
+        alert("Não foi possível gerar o token deste aparelho.");
+        return;
+      }
+
+      await db.collection("users").doc(currentUser.id).set({
+        pushTokens: firebase.firestore.FieldValue.arrayUnion(token),
+        lastPushToken: token,
+        notificationsEnabled: true,
+        notificationPermission: "granted",
+        tokenUpdatedAt: Date.now(),
+        updatedAt: Date.now()
+      }, { merge: true });
+
+      localStorage.setItem("zappi_push_token", token);
+
       new Notification("Zappi Web ativado", {
-        body: "As notificações foram permitidas neste aparelho.",
+        body: "Este aparelho agora está pronto para receber notificações.",
         icon: "icon-192.png"
       });
-    } else {
-      alert("A permissão de notificação não foi ativada.");
+
+      alert("Notificações ativadas neste aparelho.");
+    } catch (error) {
+      console.error("Erro ao ativar notificações:", error);
+      alert("Erro ao ativar notificações. Veja se está usando Chrome e se o site está em HTTPS.");
     }
   }
 
