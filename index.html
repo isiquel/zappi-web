@@ -235,6 +235,12 @@
       flex-shrink: 0;
     }
 
+    .avatar.small {
+      width: 42px;
+      height: 42px;
+      font-size: 16px;
+    }
+
     .avatar img {
       width: 100%;
       height: 100%;
@@ -272,6 +278,7 @@
       gap: 12px;
       box-shadow: 0 4px 14px rgba(0,0,0,0.06);
       cursor: pointer;
+      position: relative;
     }
 
     .contact-item:hover {
@@ -299,12 +306,29 @@
       text-overflow: ellipsis;
     }
 
+    .contact-main p.unread-text {
+      color: #075E54;
+      font-weight: 800;
+    }
+
     .time-mini {
       font-size: 11px;
       color: #888;
       white-space: nowrap;
       align-self: flex-start;
       padding-top: 3px;
+    }
+
+    .unread-badge {
+      background: #25D366;
+      color: white;
+      font-size: 10px;
+      font-weight: 900;
+      padding: 4px 7px;
+      border-radius: 999px;
+      position: absolute;
+      right: 12px;
+      bottom: 12px;
     }
 
     .empty {
@@ -353,6 +377,31 @@
     .chat-name p {
       font-size: 11px;
       opacity: 0.8;
+    }
+
+    .chat-save-bar {
+      display: none;
+      background: #fff8df;
+      color: #5b4300;
+      padding: 10px 12px;
+      border-bottom: 1px solid #f0d98b;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      font-size: 12px;
+    }
+
+    .chat-save-bar.active {
+      display: flex;
+    }
+
+    .chat-save-bar button {
+      padding: 9px 11px;
+      font-size: 12px;
+      border-radius: 10px;
+      background: #075E54;
+      color: white;
+      white-space: nowrap;
     }
 
     .chat-body {
@@ -509,7 +558,7 @@
       </div>
 
       <div class="notice">
-        Zappi Web conectado ao Firebase. Esta versão já mostra conversas recebidas mesmo quando o contato ainda não foi salvo.
+        Versão 1.2: conversas recebidas, aviso de nova mensagem, som com app aberto e botão para salvar contato.
       </div>
     </div>
   </div>
@@ -535,11 +584,16 @@
   <div id="chatScreen" class="screen">
     <div class="chat-head">
       <div class="back" onclick="closeChat()">‹</div>
-      <div class="avatar" id="chatAvatar">C</div>
+      <div class="avatar small" id="chatAvatar">C</div>
       <div class="chat-name">
         <h3 id="chatContactName">Contato</h3>
         <p id="chatContactPhone">telefone</p>
       </div>
+    </div>
+
+    <div id="chatSaveBar" class="chat-save-bar">
+      <span>Esse contato ainda não está salvo.</span>
+      <button onclick="saveActiveChatAsContact()">Salvar contato</button>
     </div>
 
     <div class="chat-body" id="chatBody"></div>
@@ -573,6 +627,7 @@
   let deferredInstallPrompt = null;
   let lastActiveMessageId = "";
   let activeTabName = "chats";
+  let knownConversationUpdates = {};
 
   const localKey = "zappi_web_v1_data";
 
@@ -801,18 +856,19 @@
 
   function conversationItemHtml(c) {
     const name = c.name || "Contato";
-    const phone = c.phone || "";
     const lastMessage = c.lastMessage || "Toque para conversar";
     const time = c.timeText || "";
+    const unread = c.unread === true;
 
     return `
       <div class="contact-item" onclick="openChatFromEncoded('${safeJson(c)}')">
         <div class="avatar">${initials(name)}</div>
         <div class="contact-main">
           <h4>${escapeHtml(name)}</h4>
-          <p>${escapeHtml(lastMessage)}</p>
+          <p class="${unread ? "unread-text" : ""}">${escapeHtml(lastMessage)}</p>
         </div>
         <div class="time-mini">${escapeHtml(time)}</div>
+        ${unread ? `<div class="unread-badge">Nova</div>` : ""}
       </div>
     `;
   }
@@ -844,6 +900,17 @@
     }
   }
 
+  function isContactSaved(contact) {
+    if (!contact) return false;
+
+    const otherId = contact.contactUserId || ("user_" + contact.phone);
+
+    return contacts.some(c => {
+      const cId = c.contactUserId || ("user_" + c.phone);
+      return cId === otherId || c.phone === contact.phone;
+    });
+  }
+
   async function addContact() {
     const name = document.getElementById("newContactName").value.trim();
     const phone = cleanPhone(document.getElementById("newContactPhone").value);
@@ -852,25 +919,31 @@
     if (!phone || phone.length < 8) return alert("Digite um telefone válido.");
     if (phone === currentUser.phone) return alert("Esse é o seu próprio telefone.");
 
+    await saveContactData(name, phone);
+    alert("Contato salvo.");
+    renderContacts();
+  }
+
+  async function saveContactData(name, phone, userId = "") {
+    const clean = cleanPhone(phone);
+    if (!clean) return;
+
     if (firebaseReady) {
       const existingContactSnap = await db.collection("contacts")
         .where("ownerId", "==", currentUser.id)
-        .where("phone", "==", phone)
+        .where("phone", "==", clean)
         .get();
 
-      if (!existingContactSnap.empty) {
-        alert("Esse contato já está salvo.");
-        return;
-      }
+      if (!existingContactSnap.empty) return;
 
-      const zappiUser = await getUserByPhone(phone);
+      const zappiUser = userId ? await getUserById(userId) : await getUserByPhone(clean);
 
       const contact = {
         ownerId: currentUser.id,
         name: zappiUser ? zappiUser.name : name,
         savedName: name,
-        phone,
-        contactUserId: zappiUser ? zappiUser.id : "user_" + phone,
+        phone: clean,
+        contactUserId: zappiUser ? zappiUser.id : (userId || "user_" + clean),
         photoUrl: zappiUser ? zappiUser.photoUrl || "" : "",
         createdAt: Date.now()
       };
@@ -880,17 +953,17 @@
       const data = loadLocal();
 
       const contact = {
-        id: "contact_" + phone,
+        id: "contact_" + clean,
         ownerId: currentUser.id,
         name,
         savedName: name,
-        phone,
-        contactUserId: "user_" + phone,
+        phone: clean,
+        contactUserId: userId || "user_" + clean,
         photoUrl: "",
         createdAt: Date.now()
       };
 
-      const exists = data.contacts.some(c => c.phone === phone);
+      const exists = data.contacts.some(c => c.phone === clean);
 
       if (!exists) {
         data.contacts.push(contact);
@@ -898,8 +971,34 @@
       }
     }
 
+    await loadContacts();
+  }
+
+  async function saveActiveChatAsContact() {
+    if (!activeChat) return;
+
+    const name = activeChat.name || activeChat.savedName || "Contato";
+    const phone = activeChat.phone || "";
+
+    if (!phone) {
+      alert("Não foi possível salvar: telefone não encontrado.");
+      return;
+    }
+
+    await saveContactData(name, phone, activeChat.contactUserId || "");
+    updateSaveContactBar();
     alert("Contato salvo.");
-    renderContacts();
+  }
+
+  function updateSaveContactBar() {
+    const bar = document.getElementById("chatSaveBar");
+    if (!bar || !activeChat) return;
+
+    if (isContactSaved(activeChat)) {
+      bar.classList.remove("active");
+    } else {
+      bar.classList.add("active");
+    }
   }
 
   async function renderChats() {
@@ -956,6 +1055,22 @@
 
         convs.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
 
+        for (const conv of convs) {
+          const previousUpdate = knownConversationUpdates[conv.docId];
+
+          if (
+            previousUpdate &&
+            conv.updatedAt &&
+            conv.updatedAt !== previousUpdate &&
+            conv.lastSenderId &&
+            conv.lastSenderId !== currentUser.id
+          ) {
+            playMessageSound();
+          }
+
+          knownConversationUpdates[conv.docId] = conv.updatedAt || 0;
+        }
+
         const items = [];
 
         for (const conv of convs) {
@@ -965,8 +1080,18 @@
           const otherUser = await getUserById(otherId);
           const participantInfo = conv.participantInfo || {};
           const fallback = participantInfo[otherId] || {};
+          const readBy = conv.readBy || {};
+          const lastRead = readBy[currentUser.id] || 0;
 
-          const contact = contacts.find(c => c.contactUserId === otherId || ("user_" + c.phone) === otherId);
+          const contact = contacts.find(c => {
+            const cId = c.contactUserId || ("user_" + c.phone);
+            return cId === otherId;
+          });
+
+          const unread =
+            conv.lastSenderId &&
+            conv.lastSenderId !== currentUser.id &&
+            (conv.updatedAt || 0) > lastRead;
 
           items.push({
             name: contact?.savedName || contact?.name || otherUser?.name || fallback.name || "Contato",
@@ -975,7 +1100,8 @@
             photoUrl: otherUser?.photoUrl || fallback.photoUrl || "",
             lastMessage: conv.lastMessage || "Toque para conversar",
             timeText: formatTime(conv.updatedAt),
-            fromConversation: true
+            fromConversation: true,
+            unread
           });
         }
 
@@ -1013,7 +1139,7 @@
         </div>
 
         <p class="hint">
-          Em breve, vamos conectar as notificações push para avisar novas mensagens mesmo com o app fechado.
+          As notificações do navegador já podem ser permitidas. A próxima etapa será conectar push notification para avisar com o app fechado.
         </p>
       </div>
 
@@ -1041,11 +1167,12 @@
     return [userA, userB].sort().join("_");
   }
 
-  function openChat(contact) {
+  async function openChat(contact) {
     activeChat = contact;
     lastActiveMessageId = "";
 
     stopConversationListener();
+    await loadContacts();
 
     document.getElementById("homeScreen").classList.remove("active");
     document.getElementById("chatScreen").classList.add("active");
@@ -1056,6 +1183,8 @@
     document.getElementById("chatContactPhone").innerText = contact.phone || "";
     document.getElementById("chatAvatar").innerText = initials(name);
 
+    updateSaveContactBar();
+    markConversationAsRead();
     listenMessages();
   }
 
@@ -1069,6 +1198,22 @@
     document.getElementById("chatScreen").classList.remove("active");
     document.getElementById("homeScreen").classList.add("active");
     openTab("chats");
+  }
+
+  async function markConversationAsRead() {
+    if (!firebaseReady || !activeChat) return;
+
+    const otherId = activeChat.contactUserId || ("user_" + activeChat.phone);
+    const conversationId = getConversationId(currentUser.id, otherId);
+
+    const data = {};
+    data["readBy." + currentUser.id] = Date.now();
+
+    try {
+      await db.collection("conversations").doc(conversationId).set(data, { merge: true });
+    } catch (e) {
+      console.error("Erro ao marcar como lida:", e);
+    }
   }
 
   async function listenMessages() {
@@ -1097,6 +1242,7 @@
               newest.senderId !== currentUser.id
             ) {
               playMessageSound();
+              markConversationAsRead();
             }
 
             lastActiveMessageId = newest.id;
@@ -1174,13 +1320,17 @@
         photoUrl: otherUser?.photoUrl || activeChat.photoUrl || ""
       };
 
+      const readBy = {};
+      readBy[currentUser.id] = Date.now();
+
       await convRef.set({
         id: conversationId,
         participants: [currentUser.id, otherId],
         participantInfo,
         lastMessage: text,
         lastSenderId: currentUser.id,
-        updatedAt: Date.now()
+        updatedAt: Date.now(),
+        readBy
       }, { merge: true });
 
       await convRef.collection("messages").add(message);
