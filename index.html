@@ -672,7 +672,7 @@
       </div>
 
       <div class="notice">
-        Versão 1.6: salva o token de notificação do celular no Firebase.
+        Versão 1.7: envia notificação push pela API da Vercel quando uma mensagem é enviada.
       </div>
     </div>
   </div>
@@ -1415,6 +1415,46 @@
     }, 80);
   }
 
+  async function sendPushNotificationToUser(receiverId, messageText) {
+    if (!firebaseReady || !db || !receiverId) return;
+
+    try {
+      const receiverDoc = await db.collection("users").doc(receiverId).get();
+
+      if (!receiverDoc.exists) {
+        console.log("Usuário destinatário não encontrado.");
+        return;
+      }
+
+      const receiver = receiverDoc.data();
+      const tokens = receiver.pushTokens || [];
+
+      if (!tokens.length) {
+        console.log("Destinatário ainda não ativou notificações.");
+        return;
+      }
+
+      const response = await fetch("/api/sendNotification", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          tokens,
+          title: "Nova mensagem de " + currentUser.name,
+          body: messageText,
+          url: "/"
+        })
+      });
+
+      const result = await response.json();
+      console.log("Resultado da notificação:", result);
+
+    } catch (error) {
+      console.error("Erro ao enviar push notification:", error);
+    }
+  }
+
   async function sendMessage() {
     const input = document.getElementById("messageInput");
     const text = input.value.trim();
@@ -1470,6 +1510,9 @@
       }, { merge: true });
 
       await convRef.collection("messages").add(message);
+
+      await sendPushNotificationToUser(otherId, text);
+
     } else {
       const data = loadLocal();
 
