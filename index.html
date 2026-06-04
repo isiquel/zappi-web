@@ -465,7 +465,7 @@
         <h1>Zappi Web</h1>
         <small>Sua rede própria de conversas</small>
       </div>
-      <div class="status-badge" id="firebaseStatus">Local</div>
+      <div class="status-badge" id="firebaseStatus">Conectando</div>
     </div>
 
     <div class="welcome">
@@ -492,8 +492,7 @@
       </div>
 
       <div class="notice">
-        Para funcionar entre celulares de verdade, coloque sua configuração do Firebase no código.
-        Sem Firebase, esta versão funciona como demonstração local.
+        Zappi Web conectado ao Firebase. Agora falta ativar Authentication anônima e Firestore Database no painel do Firebase.
       </div>
     </div>
   </div>
@@ -537,30 +536,13 @@
 </div>
 
 <script>
-  /*
-    CONFIGURAÇÃO DO FIREBASE
-
-    Quando você criar seu projeto no Firebase, cole aqui as informações.
-    Enquanto estiver vazio, o app funciona em modo local.
-
-    Exemplo:
-    const firebaseConfig = {
-      apiKey: "SUA_API_KEY",
-      authDomain: "seu-projeto.firebaseapp.com",
-      projectId: "seu-projeto",
-      storageBucket: "seu-projeto.appspot.com",
-      messagingSenderId: "000000000000",
-      appId: "1:000000000000:web:xxxxxxxxxxxx"
-    };
-  */
-
   const firebaseConfig = {
-    apiKey: "",
-    authDomain: "",
-    projectId: "",
-    storageBucket: "",
-    messagingSenderId: "",
-    appId: ""
+    apiKey: "AIzaSyBXQJGJPREafTPDIpbzDSSov2Ju3kvei3w",
+    authDomain: "zappi-web.firebaseapp.com",
+    projectId: "zappi-web",
+    storageBucket: "zappi-web.firebasestorage.app",
+    messagingSenderId: "675790989502",
+    appId: "1:675790989502:web:36a7f3d1bcbb3bfb1b96ef"
   };
 
   let firebaseReady = false;
@@ -568,23 +550,13 @@
   let auth = null;
   let currentUser = null;
   let contacts = [];
-  let conversations = [];
   let activeChat = null;
   let activeMessagesUnsubscribe = null;
   let deferredInstallPrompt = null;
 
   const localKey = "zappi_web_v1_data";
 
-  function hasFirebaseConfig() {
-    return firebaseConfig.apiKey && firebaseConfig.projectId && firebaseConfig.appId;
-  }
-
   async function initFirebase() {
-    if (!hasFirebaseConfig()) {
-      document.getElementById("firebaseStatus").innerText = "Demo local";
-      return;
-    }
-
     try {
       firebase.initializeApp(firebaseConfig);
       auth = firebase.auth();
@@ -595,9 +567,9 @@
       firebaseReady = true;
       document.getElementById("firebaseStatus").innerText = "Firebase";
     } catch (error) {
-      console.error(error);
+      console.error("Erro ao conectar Firebase:", error);
       firebaseReady = false;
-      document.getElementById("firebaseStatus").innerText = "Erro Firebase";
+      document.getElementById("firebaseStatus").innerText = "Modo local";
     }
   }
 
@@ -621,14 +593,12 @@
       return JSON.parse(localStorage.getItem(localKey)) || {
         user: null,
         contacts: [],
-        conversations: {},
         messages: {}
       };
     } catch {
       return {
         user: null,
         contacts: [],
-        conversations: {},
         messages: {}
       };
     }
@@ -679,6 +649,7 @@
     }
 
     const data = loadLocal();
+
     if (data.user) {
       currentUser = data.user;
       showHome();
@@ -755,11 +726,16 @@
     showInstallIfAvailable();
   }
 
+  function safeJson(obj) {
+    return encodeURIComponent(JSON.stringify(obj));
+  }
+
   function contactItemHtml(c) {
     const name = c.name || c.savedName || "Contato";
     const phone = c.phone || c.contactPhone || "";
+
     return `
-      <div class="contact-item" onclick='openChat(${JSON.stringify(c).replace(/'/g, "&apos;")})'>
+      <div class="contact-item" onclick="openChatFromEncoded('${safeJson(c)}')">
         <div class="avatar">${initials(name)}</div>
         <div class="contact-main">
           <h4>${escapeHtml(name)}</h4>
@@ -767,6 +743,11 @@
         </div>
       </div>
     `;
+  }
+
+  function openChatFromEncoded(encoded) {
+    const contact = JSON.parse(decodeURIComponent(encoded));
+    openChat(contact);
   }
 
   async function addContact() {
@@ -777,18 +758,26 @@
     if (!phone || phone.length < 8) return alert("Digite um telefone válido.");
     if (phone === currentUser.phone) return alert("Esse é o seu próprio telefone.");
 
-    let zappiUser = null;
-
     if (firebaseReady) {
+      const existingContactSnap = await db.collection("contacts")
+        .where("ownerId", "==", currentUser.id)
+        .where("phone", "==", phone)
+        .get();
+
+      if (!existingContactSnap.empty) {
+        alert("Esse contato já está salvo.");
+        return;
+      }
+
       const userDoc = await db.collection("users").doc("user_" + phone).get();
-      if (userDoc.exists) zappiUser = userDoc.data();
+      const zappiUser = userDoc.exists ? userDoc.data() : null;
 
       const contact = {
         ownerId: currentUser.id,
         name: zappiUser ? zappiUser.name : name,
         savedName: name,
         phone,
-        contactUserId: zappiUser ? zappiUser.id : "",
+        contactUserId: zappiUser ? zappiUser.id : "user_" + phone,
         photoUrl: zappiUser ? zappiUser.photoUrl || "" : "",
         createdAt: Date.now()
       };
@@ -809,8 +798,11 @@
       };
 
       const exists = data.contacts.some(c => c.phone === phone);
-      if (!exists) data.contacts.push(contact);
-      saveLocal(data);
+
+      if (!exists) {
+        data.contacts.push(contact);
+        saveLocal(data);
+      }
     }
 
     alert("Contato salvo.");
@@ -863,8 +855,7 @@
         </div>
 
         <p class="hint">
-          Futuramente, quando as notificações push forem conectadas ao Firebase Cloud Messaging,
-          novas mensagens poderão aparecer no celular mesmo com o app fechado.
+          Em breve, vamos conectar as notificações push para avisar novas mensagens mesmo com o app fechado.
         </p>
       </div>
 
@@ -899,6 +890,7 @@
     document.getElementById("chatScreen").classList.add("active");
 
     const name = contact.name || contact.savedName || "Contato";
+
     document.getElementById("chatContactName").innerText = name;
     document.getElementById("chatContactPhone").innerText = contact.phone || "";
     document.getElementById("chatAvatar").innerText = initials(name);
@@ -953,6 +945,7 @@
 
     chatBody.innerHTML = messages.map(m => {
       const mine = m.senderId === currentUser.id;
+
       return `
         <div class="msg ${mine ? "me" : "other"}">
           ${escapeHtml(m.text || "")}
@@ -1000,7 +993,11 @@
       await convRef.collection("messages").add(message);
     } else {
       const data = loadLocal();
-      if (!data.messages[conversationId]) data.messages[conversationId] = [];
+
+      if (!data.messages[conversationId]) {
+        data.messages[conversationId] = [];
+      }
+
       data.messages[conversationId].push(message);
       saveLocal(data);
       listenMessages();
@@ -1029,6 +1026,7 @@
       gain.connect(ctx.destination);
 
       oscillator.start();
+
       setTimeout(() => {
         oscillator.stop();
         ctx.close();
@@ -1046,7 +1044,7 @@
 
     if (permission === "granted") {
       new Notification("Zappi Web ativado", {
-        body: "Você receberá avisos quando as notificações push forem conectadas.",
+        body: "As notificações foram permitidas neste aparelho.",
         icon: "icon-192.png"
       });
     } else {
@@ -1085,6 +1083,7 @@
 
   function showInstallIfAvailable() {
     const box = document.getElementById("installBox");
+
     if (box && deferredInstallPrompt) {
       box.style.display = "block";
     }
@@ -1109,12 +1108,18 @@
 
   window.addEventListener("online", () => {
     const el = document.getElementById("networkStatus");
-    if (el) el.innerText = "Online";
+
+    if (el) {
+      el.innerText = "Online";
+    }
   });
 
   window.addEventListener("offline", () => {
     const el = document.getElementById("networkStatus");
-    if (el) el.innerText = "Offline";
+
+    if (el) {
+      el.innerText = "Offline";
+    }
   });
 
   (async function start() {
