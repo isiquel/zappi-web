@@ -1,0 +1,1127 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <title>Zappi Web</title>
+
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#075E54" />
+  <meta name="description" content="Zappi Web - aplicativo próprio de conversas por contatos." />
+
+  <script src="https://www.gstatic.com/firebasejs/10.12.4/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.4/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore-compat.js"></script>
+
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: Arial, Helvetica, sans-serif;
+    }
+
+    body {
+      background: #d9fdd3;
+      min-height: 100vh;
+      color: #111;
+    }
+
+    .app {
+      width: 100%;
+      max-width: 480px;
+      min-height: 100vh;
+      margin: 0 auto;
+      background: #f4f7f5;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 0 25px rgba(0,0,0,0.2);
+    }
+
+    .topbar {
+      background: #075E54;
+      color: white;
+      padding: 18px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .brand {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .brand h1 {
+      font-size: 22px;
+      font-weight: 800;
+    }
+
+    .brand small {
+      font-size: 12px;
+      opacity: 0.85;
+    }
+
+    .status-badge {
+      background: rgba(255,255,255,0.15);
+      border: 1px solid rgba(255,255,255,0.25);
+      color: white;
+      padding: 6px 9px;
+      border-radius: 20px;
+      font-size: 11px;
+    }
+
+    .screen {
+      display: none;
+      flex: 1;
+      overflow: auto;
+    }
+
+    .screen.active {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .welcome {
+      padding: 28px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    .hero {
+      background: linear-gradient(135deg, #075E54, #128C7E);
+      color: white;
+      padding: 26px 22px;
+      border-radius: 24px;
+      box-shadow: 0 12px 30px rgba(7,94,84,0.25);
+    }
+
+    .hero h2 {
+      font-size: 28px;
+      margin-bottom: 8px;
+    }
+
+    .hero p {
+      line-height: 1.45;
+      opacity: 0.95;
+      font-size: 15px;
+    }
+
+    .card {
+      background: white;
+      padding: 18px;
+      border-radius: 18px;
+      box-shadow: 0 8px 22px rgba(0,0,0,0.08);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    label {
+      font-size: 13px;
+      font-weight: 700;
+      color: #333;
+    }
+
+    input {
+      width: 100%;
+      padding: 14px;
+      border: 1px solid #d7d7d7;
+      border-radius: 14px;
+      outline: none;
+      font-size: 15px;
+      background: #fff;
+    }
+
+    input:focus {
+      border-color: #128C7E;
+      box-shadow: 0 0 0 3px rgba(18,140,126,0.12);
+    }
+
+    button {
+      border: none;
+      padding: 14px 16px;
+      border-radius: 14px;
+      cursor: pointer;
+      font-weight: 800;
+      font-size: 15px;
+      transition: 0.2s;
+    }
+
+    button:active {
+      transform: scale(0.98);
+    }
+
+    .btn-primary {
+      background: #128C7E;
+      color: white;
+    }
+
+    .btn-dark {
+      background: #075E54;
+      color: white;
+    }
+
+    .btn-light {
+      background: #eef6f4;
+      color: #075E54;
+    }
+
+    .btn-danger {
+      background: #ffe8e8;
+      color: #a80000;
+    }
+
+    .hint {
+      font-size: 12px;
+      color: #666;
+      line-height: 1.4;
+    }
+
+    .tabs {
+      display: flex;
+      background: #075E54;
+      color: white;
+    }
+
+    .tab {
+      flex: 1;
+      text-align: center;
+      padding: 13px 4px;
+      font-size: 13px;
+      font-weight: 700;
+      opacity: 0.75;
+      border-bottom: 3px solid transparent;
+      cursor: pointer;
+    }
+
+    .tab.active {
+      opacity: 1;
+      border-bottom-color: white;
+    }
+
+    .content {
+      padding: 14px;
+      flex: 1;
+      overflow: auto;
+    }
+
+    .profile-box {
+      display: flex;
+      gap: 14px;
+      align-items: center;
+      background: white;
+      padding: 16px;
+      border-radius: 18px;
+      box-shadow: 0 6px 18px rgba(0,0,0,0.07);
+      margin-bottom: 14px;
+    }
+
+    .avatar {
+      width: 52px;
+      height: 52px;
+      border-radius: 50%;
+      background: #128C7E;
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 900;
+      font-size: 20px;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+
+    .avatar img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .profile-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .profile-info h3 {
+      font-size: 17px;
+      margin-bottom: 4px;
+    }
+
+    .profile-info p {
+      font-size: 13px;
+      color: #666;
+      word-break: break-word;
+    }
+
+    .list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .contact-item {
+      background: white;
+      border-radius: 16px;
+      padding: 14px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.06);
+      cursor: pointer;
+    }
+
+    .contact-item:hover {
+      background: #f8fffd;
+    }
+
+    .contact-main {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .contact-main h4 {
+      font-size: 15px;
+      margin-bottom: 4px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .contact-main p {
+      font-size: 12px;
+      color: #777;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .empty {
+      text-align: center;
+      color: #666;
+      padding: 40px 15px;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .chat-head {
+      background: #075E54;
+      color: white;
+      padding: 12px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .back {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.14);
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+
+    .chat-name {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .chat-name h3 {
+      font-size: 16px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .chat-name p {
+      font-size: 11px;
+      opacity: 0.8;
+    }
+
+    .chat-body {
+      flex: 1;
+      padding: 14px;
+      overflow: auto;
+      background: #efeae2;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .msg {
+      max-width: 78%;
+      padding: 10px 12px;
+      border-radius: 14px;
+      font-size: 14px;
+      line-height: 1.35;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.12);
+      word-wrap: break-word;
+    }
+
+    .msg.me {
+      align-self: flex-end;
+      background: #d9fdd3;
+      border-bottom-right-radius: 4px;
+    }
+
+    .msg.other {
+      align-self: flex-start;
+      background: white;
+      border-bottom-left-radius: 4px;
+    }
+
+    .msg small {
+      display: block;
+      text-align: right;
+      font-size: 10px;
+      opacity: 0.55;
+      margin-top: 4px;
+    }
+
+    .chat-input {
+      background: #f0f2f5;
+      padding: 10px;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .chat-input input {
+      border-radius: 22px;
+      padding: 13px 15px;
+    }
+
+    .send-btn {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background: #128C7E;
+      color: white;
+      font-size: 18px;
+      flex-shrink: 0;
+    }
+
+    .install-box {
+      background: #fff8df;
+      border: 1px solid #ffe39c;
+      color: #5b4300;
+      padding: 14px;
+      border-radius: 16px;
+      font-size: 13px;
+      line-height: 1.4;
+      margin-bottom: 14px;
+      display: none;
+    }
+
+    .pill {
+      display: inline-block;
+      background: #e8f6f3;
+      color: #075E54;
+      padding: 6px 9px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 800;
+      margin-top: 6px;
+    }
+
+    .small-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .small-actions button {
+      font-size: 13px;
+      padding: 10px 12px;
+    }
+
+    .notice {
+      background: #eef6ff;
+      border: 1px solid #cfe8ff;
+      color: #16446b;
+      padding: 12px;
+      border-radius: 14px;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+  </style>
+</head>
+<body>
+
+<div class="app">
+
+  <div id="registerScreen" class="screen active">
+    <div class="topbar">
+      <div class="brand">
+        <h1>Zappi Web</h1>
+        <small>Sua rede própria de conversas</small>
+      </div>
+      <div class="status-badge" id="firebaseStatus">Local</div>
+    </div>
+
+    <div class="welcome">
+      <div class="hero">
+        <h2>Converse pelo seu próprio app</h2>
+        <p>Cadastre seu nome e telefone, salve contatos e converse dentro do Zappi Web.</p>
+      </div>
+
+      <div class="card">
+        <label>Seu nome</label>
+        <input id="regName" type="text" placeholder="Ex: Ezequiel Ferreira" />
+
+        <label>Seu telefone</label>
+        <input id="regPhone" type="tel" placeholder="Ex: 44999999999" />
+
+        <label>E-mail, opcional</label>
+        <input id="regEmail" type="email" placeholder="Ex: seuemail@gmail.com" />
+
+        <button class="btn-primary" onclick="createProfile()">Entrar no Zappi Web</button>
+
+        <p class="hint">
+          O telefone será o seu contato Zappi. Outras pessoas poderão te encontrar por ele dentro do aplicativo.
+        </p>
+      </div>
+
+      <div class="notice">
+        Para funcionar entre celulares de verdade, coloque sua configuração do Firebase no código.
+        Sem Firebase, esta versão funciona como demonstração local.
+      </div>
+    </div>
+  </div>
+
+  <div id="homeScreen" class="screen">
+    <div class="topbar">
+      <div class="brand">
+        <h1>Zappi Web</h1>
+        <small id="topUserName">Conectado</small>
+      </div>
+      <div class="status-badge" id="networkStatus">Online</div>
+    </div>
+
+    <div class="tabs">
+      <div class="tab active" onclick="openTab('chats')">Conversas</div>
+      <div class="tab" onclick="openTab('contacts')">Contatos</div>
+      <div class="tab" onclick="openTab('profile')">Perfil</div>
+    </div>
+
+    <div class="content" id="tabContent"></div>
+  </div>
+
+  <div id="chatScreen" class="screen">
+    <div class="chat-head">
+      <div class="back" onclick="closeChat()">‹</div>
+      <div class="avatar" id="chatAvatar">C</div>
+      <div class="chat-name">
+        <h3 id="chatContactName">Contato</h3>
+        <p id="chatContactPhone">telefone</p>
+      </div>
+    </div>
+
+    <div class="chat-body" id="chatBody"></div>
+
+    <div class="chat-input">
+      <input id="messageInput" type="text" placeholder="Digite uma mensagem..." onkeydown="handleMessageKey(event)" />
+      <button class="send-btn" onclick="sendMessage()">➤</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  /*
+    CONFIGURAÇÃO DO FIREBASE
+
+    Quando você criar seu projeto no Firebase, cole aqui as informações.
+    Enquanto estiver vazio, o app funciona em modo local.
+
+    Exemplo:
+    const firebaseConfig = {
+      apiKey: "SUA_API_KEY",
+      authDomain: "seu-projeto.firebaseapp.com",
+      projectId: "seu-projeto",
+      storageBucket: "seu-projeto.appspot.com",
+      messagingSenderId: "000000000000",
+      appId: "1:000000000000:web:xxxxxxxxxxxx"
+    };
+  */
+
+  const firebaseConfig = {
+    apiKey: "",
+    authDomain: "",
+    projectId: "",
+    storageBucket: "",
+    messagingSenderId: "",
+    appId: ""
+  };
+
+  let firebaseReady = false;
+  let db = null;
+  let auth = null;
+  let currentUser = null;
+  let contacts = [];
+  let conversations = [];
+  let activeChat = null;
+  let activeMessagesUnsubscribe = null;
+  let deferredInstallPrompt = null;
+
+  const localKey = "zappi_web_v1_data";
+
+  function hasFirebaseConfig() {
+    return firebaseConfig.apiKey && firebaseConfig.projectId && firebaseConfig.appId;
+  }
+
+  async function initFirebase() {
+    if (!hasFirebaseConfig()) {
+      document.getElementById("firebaseStatus").innerText = "Demo local";
+      return;
+    }
+
+    try {
+      firebase.initializeApp(firebaseConfig);
+      auth = firebase.auth();
+      db = firebase.firestore();
+
+      await auth.signInAnonymously();
+
+      firebaseReady = true;
+      document.getElementById("firebaseStatus").innerText = "Firebase";
+    } catch (error) {
+      console.error(error);
+      firebaseReady = false;
+      document.getElementById("firebaseStatus").innerText = "Erro Firebase";
+    }
+  }
+
+  function cleanPhone(phone) {
+    return String(phone || "").replace(/\D/g, "");
+  }
+
+  function initials(name) {
+    const parts = String(name || "Z").trim().split(" ").filter(Boolean);
+    if (parts.length === 1) return parts[0][0]?.toUpperCase() || "Z";
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  }
+
+  function nowText() {
+    const d = new Date();
+    return d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  }
+
+  function loadLocal() {
+    try {
+      return JSON.parse(localStorage.getItem(localKey)) || {
+        user: null,
+        contacts: [],
+        conversations: {},
+        messages: {}
+      };
+    } catch {
+      return {
+        user: null,
+        contacts: [],
+        conversations: {},
+        messages: {}
+      };
+    }
+  }
+
+  function saveLocal(data) {
+    localStorage.setItem(localKey, JSON.stringify(data));
+  }
+
+  async function createProfile() {
+    const name = document.getElementById("regName").value.trim();
+    const phone = cleanPhone(document.getElementById("regPhone").value);
+    const email = document.getElementById("regEmail").value.trim();
+
+    if (!name) return alert("Digite seu nome.");
+    if (!phone || phone.length < 8) return alert("Digite um telefone válido.");
+
+    const user = {
+      id: "user_" + phone,
+      name,
+      phone,
+      email,
+      photoUrl: "",
+      createdAt: Date.now()
+    };
+
+    currentUser = user;
+
+    if (firebaseReady) {
+      await db.collection("users").doc(user.id).set(user, { merge: true });
+      localStorage.setItem("zappi_current_user", JSON.stringify(user));
+    } else {
+      const data = loadLocal();
+      data.user = user;
+      saveLocal(data);
+    }
+
+    showHome();
+  }
+
+  async function checkExistingProfile() {
+    const savedFirebaseUser = localStorage.getItem("zappi_current_user");
+
+    if (savedFirebaseUser) {
+      currentUser = JSON.parse(savedFirebaseUser);
+      showHome();
+      return;
+    }
+
+    const data = loadLocal();
+    if (data.user) {
+      currentUser = data.user;
+      showHome();
+    }
+  }
+
+  function showHome() {
+    document.getElementById("registerScreen").classList.remove("active");
+    document.getElementById("chatScreen").classList.remove("active");
+    document.getElementById("homeScreen").classList.add("active");
+    document.getElementById("topUserName").innerText = currentUser.name;
+    openTab("chats");
+  }
+
+  function openTab(tab) {
+    document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+
+    const tabElements = document.querySelectorAll(".tab");
+    if (tab === "chats") tabElements[0].classList.add("active");
+    if (tab === "contacts") tabElements[1].classList.add("active");
+    if (tab === "profile") tabElements[2].classList.add("active");
+
+    if (tab === "chats") renderChats();
+    if (tab === "contacts") renderContacts();
+    if (tab === "profile") renderProfile();
+  }
+
+  async function getLocalContacts() {
+    const data = loadLocal();
+    return data.contacts || [];
+  }
+
+  async function getFirebaseContacts() {
+    const snap = await db.collection("contacts")
+      .where("ownerId", "==", currentUser.id)
+      .get();
+
+    return snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  }
+
+  async function loadContacts() {
+    contacts = firebaseReady ? await getFirebaseContacts() : await getLocalContacts();
+    return contacts;
+  }
+
+  async function renderContacts() {
+    await loadContacts();
+
+    const html = `
+      <div class="install-box" id="installBox">
+        Você pode instalar o Zappi Web na tela inicial do celular.
+        <br><br>
+        <button class="btn-dark" onclick="installApp()">Instalar aplicativo</button>
+      </div>
+
+      <div class="card" style="margin-bottom:14px;">
+        <label>Adicionar contato pelo telefone</label>
+        <input id="newContactName" type="text" placeholder="Nome para salvar" />
+        <input id="newContactPhone" type="tel" placeholder="Telefone do contato" />
+        <button class="btn-primary" onclick="addContact()">Salvar contato</button>
+        <p class="hint">Se esse telefone já tiver cadastro no Zappi Web, você poderá iniciar conversa.</p>
+      </div>
+
+      <div class="list">
+        ${
+          contacts.length
+          ? contacts.map(c => contactItemHtml(c)).join("")
+          : `<div class="empty">Nenhum contato salvo ainda.<br>Adicione alguém pelo telefone.</div>`
+        }
+      </div>
+    `;
+
+    document.getElementById("tabContent").innerHTML = html;
+    showInstallIfAvailable();
+  }
+
+  function contactItemHtml(c) {
+    const name = c.name || c.savedName || "Contato";
+    const phone = c.phone || c.contactPhone || "";
+    return `
+      <div class="contact-item" onclick='openChat(${JSON.stringify(c).replace(/'/g, "&apos;")})'>
+        <div class="avatar">${initials(name)}</div>
+        <div class="contact-main">
+          <h4>${escapeHtml(name)}</h4>
+          <p>${escapeHtml(phone)} · Toque para conversar</p>
+        </div>
+      </div>
+    `;
+  }
+
+  async function addContact() {
+    const name = document.getElementById("newContactName").value.trim();
+    const phone = cleanPhone(document.getElementById("newContactPhone").value);
+
+    if (!name) return alert("Digite o nome do contato.");
+    if (!phone || phone.length < 8) return alert("Digite um telefone válido.");
+    if (phone === currentUser.phone) return alert("Esse é o seu próprio telefone.");
+
+    let zappiUser = null;
+
+    if (firebaseReady) {
+      const userDoc = await db.collection("users").doc("user_" + phone).get();
+      if (userDoc.exists) zappiUser = userDoc.data();
+
+      const contact = {
+        ownerId: currentUser.id,
+        name: zappiUser ? zappiUser.name : name,
+        savedName: name,
+        phone,
+        contactUserId: zappiUser ? zappiUser.id : "",
+        photoUrl: zappiUser ? zappiUser.photoUrl || "" : "",
+        createdAt: Date.now()
+      };
+
+      await db.collection("contacts").add(contact);
+    } else {
+      const data = loadLocal();
+
+      const contact = {
+        id: "contact_" + phone,
+        ownerId: currentUser.id,
+        name,
+        savedName: name,
+        phone,
+        contactUserId: "user_" + phone,
+        photoUrl: "",
+        createdAt: Date.now()
+      };
+
+      const exists = data.contacts.some(c => c.phone === phone);
+      if (!exists) data.contacts.push(contact);
+      saveLocal(data);
+    }
+
+    alert("Contato salvo.");
+    renderContacts();
+  }
+
+  async function renderChats() {
+    await loadContacts();
+
+    const html = `
+      <div class="profile-box">
+        <div class="avatar">${initials(currentUser.name)}</div>
+        <div class="profile-info">
+          <h3>${escapeHtml(currentUser.name)}</h3>
+          <p>Seu contato Zappi: ${escapeHtml(currentUser.phone)}</p>
+        </div>
+      </div>
+
+      <div class="list">
+        ${
+          contacts.length
+          ? contacts.map(c => contactItemHtml(c)).join("")
+          : `<div class="empty">Suas conversas aparecerão aqui.<br>Salve um contato para começar.</div>`
+        }
+      </div>
+    `;
+
+    document.getElementById("tabContent").innerHTML = html;
+  }
+
+  function renderProfile() {
+    const html = `
+      <div class="profile-box">
+        <div class="avatar">${initials(currentUser.name)}</div>
+        <div class="profile-info">
+          <h3>${escapeHtml(currentUser.name)}</h3>
+          <p>${escapeHtml(currentUser.phone)}</p>
+          <span class="pill">Meu contato Zappi</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <label>Compartilhe seu contato Zappi</label>
+        <input value="${currentUser.phone}" readonly onclick="this.select()" />
+
+        <div class="small-actions">
+          <button class="btn-primary" onclick="copyMyContact()">Copiar contato</button>
+          <button class="btn-light" onclick="requestNotificationPermission()">Ativar notificações</button>
+          <button class="btn-danger" onclick="logout()">Sair</button>
+        </div>
+
+        <p class="hint">
+          Futuramente, quando as notificações push forem conectadas ao Firebase Cloud Messaging,
+          novas mensagens poderão aparecer no celular mesmo com o app fechado.
+        </p>
+      </div>
+
+      <br>
+
+      <div class="card">
+        <label>Instalação no celular</label>
+        <p class="hint">
+          No Android, abra pelo Chrome e toque em “Adicionar à tela inicial”.
+          Quando disponível, também aparecerá o botão de instalação automática.
+        </p>
+        <button class="btn-dark" onclick="installApp()">Instalar Zappi Web</button>
+      </div>
+    `;
+
+    document.getElementById("tabContent").innerHTML = html;
+  }
+
+  function copyMyContact() {
+    navigator.clipboard.writeText(currentUser.phone);
+    alert("Contato Zappi copiado.");
+  }
+
+  function getConversationId(userA, userB) {
+    return [userA, userB].sort().join("_");
+  }
+
+  function openChat(contact) {
+    activeChat = contact;
+
+    document.getElementById("homeScreen").classList.remove("active");
+    document.getElementById("chatScreen").classList.add("active");
+
+    const name = contact.name || contact.savedName || "Contato";
+    document.getElementById("chatContactName").innerText = name;
+    document.getElementById("chatContactPhone").innerText = contact.phone || "";
+    document.getElementById("chatAvatar").innerText = initials(name);
+
+    listenMessages();
+  }
+
+  function closeChat() {
+    if (activeMessagesUnsubscribe) {
+      activeMessagesUnsubscribe();
+      activeMessagesUnsubscribe = null;
+    }
+
+    activeChat = null;
+    document.getElementById("chatScreen").classList.remove("active");
+    document.getElementById("homeScreen").classList.add("active");
+    renderChats();
+  }
+
+  async function listenMessages() {
+    const chatBody = document.getElementById("chatBody");
+    chatBody.innerHTML = `<div class="empty">Carregando mensagens...</div>`;
+
+    const otherId = activeChat.contactUserId || ("user_" + activeChat.phone);
+    const conversationId = getConversationId(currentUser.id, otherId);
+
+    if (firebaseReady) {
+      if (activeMessagesUnsubscribe) activeMessagesUnsubscribe();
+
+      activeMessagesUnsubscribe = db.collection("conversations")
+        .doc(conversationId)
+        .collection("messages")
+        .orderBy("createdAt", "asc")
+        .onSnapshot(snapshot => {
+          const messages = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          renderMessages(messages);
+        });
+    } else {
+      const data = loadLocal();
+      const messages = data.messages[conversationId] || [];
+      renderMessages(messages);
+    }
+  }
+
+  function renderMessages(messages) {
+    const chatBody = document.getElementById("chatBody");
+
+    if (!messages.length) {
+      chatBody.innerHTML = `<div class="empty">Nenhuma mensagem ainda.<br>Envie a primeira mensagem.</div>`;
+      return;
+    }
+
+    chatBody.innerHTML = messages.map(m => {
+      const mine = m.senderId === currentUser.id;
+      return `
+        <div class="msg ${mine ? "me" : "other"}">
+          ${escapeHtml(m.text || "")}
+          <small>${m.timeText || ""}</small>
+        </div>
+      `;
+    }).join("");
+
+    chatBody.scrollTop = chatBody.scrollHeight;
+  }
+
+  async function sendMessage() {
+    const input = document.getElementById("messageInput");
+    const text = input.value.trim();
+
+    if (!text || !activeChat) return;
+
+    input.value = "";
+
+    const otherId = activeChat.contactUserId || ("user_" + activeChat.phone);
+    const conversationId = getConversationId(currentUser.id, otherId);
+
+    const message = {
+      conversationId,
+      senderId: currentUser.id,
+      senderName: currentUser.name,
+      receiverId: otherId,
+      text,
+      type: "text",
+      createdAt: Date.now(),
+      timeText: nowText(),
+      read: false
+    };
+
+    if (firebaseReady) {
+      const convRef = db.collection("conversations").doc(conversationId);
+
+      await convRef.set({
+        id: conversationId,
+        participants: [currentUser.id, otherId],
+        lastMessage: text,
+        updatedAt: Date.now()
+      }, { merge: true });
+
+      await convRef.collection("messages").add(message);
+    } else {
+      const data = loadLocal();
+      if (!data.messages[conversationId]) data.messages[conversationId] = [];
+      data.messages[conversationId].push(message);
+      saveLocal(data);
+      listenMessages();
+    }
+
+    playMessageSound();
+  }
+
+  function handleMessageKey(event) {
+    if (event.key === "Enter") {
+      sendMessage();
+    }
+  }
+
+  function playMessageSound() {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const oscillator = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      oscillator.type = "sine";
+      oscillator.frequency.value = 780;
+      gain.gain.value = 0.08;
+
+      oscillator.connect(gain);
+      gain.connect(ctx.destination);
+
+      oscillator.start();
+      setTimeout(() => {
+        oscillator.stop();
+        ctx.close();
+      }, 120);
+    } catch (e) {}
+  }
+
+  async function requestNotificationPermission() {
+    if (!("Notification" in window)) {
+      alert("Este navegador não suporta notificações.");
+      return;
+    }
+
+    const permission = await Notification.requestPermission();
+
+    if (permission === "granted") {
+      new Notification("Zappi Web ativado", {
+        body: "Você receberá avisos quando as notificações push forem conectadas.",
+        icon: "icon-192.png"
+      });
+    } else {
+      alert("A permissão de notificação não foi ativada.");
+    }
+  }
+
+  function logout() {
+    if (!confirm("Deseja sair deste perfil?")) return;
+
+    localStorage.removeItem("zappi_current_user");
+
+    if (!firebaseReady) {
+      const data = loadLocal();
+      data.user = null;
+      saveLocal(data);
+    }
+
+    location.reload();
+  }
+
+  function escapeHtml(text) {
+    return String(text || "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+
+  window.addEventListener("beforeinstallprompt", (event) => {
+    event.preventDefault();
+    deferredInstallPrompt = event;
+    showInstallIfAvailable();
+  });
+
+  function showInstallIfAvailable() {
+    const box = document.getElementById("installBox");
+    if (box && deferredInstallPrompt) {
+      box.style.display = "block";
+    }
+  }
+
+  async function installApp() {
+    if (!deferredInstallPrompt) {
+      alert("Se o botão automático não aparecer, use o menu do navegador e toque em 'Adicionar à tela inicial'.");
+      return;
+    }
+
+    deferredInstallPrompt.prompt();
+    await deferredInstallPrompt.userChoice;
+    deferredInstallPrompt = null;
+  }
+
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("sw.js").catch(console.error);
+    });
+  }
+
+  window.addEventListener("online", () => {
+    const el = document.getElementById("networkStatus");
+    if (el) el.innerText = "Online";
+  });
+
+  window.addEventListener("offline", () => {
+    const el = document.getElementById("networkStatus");
+    if (el) el.innerText = "Offline";
+  });
+
+  (async function start() {
+    await initFirebase();
+    await checkExistingProfile();
+  })();
+</script>
+
+</body>
+</html>
