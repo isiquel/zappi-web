@@ -12,32 +12,58 @@ firebase.initializeApp({
 
 const messaging = firebase.messaging();
 
+function getFullUrl(rawUrl) {
+  if (!rawUrl) {
+    return self.location.origin + "/";
+  }
+
+  if (String(rawUrl).startsWith("http://") || String(rawUrl).startsWith("https://")) {
+    return String(rawUrl);
+  }
+
+  if (String(rawUrl).startsWith("/")) {
+    return self.location.origin + String(rawUrl);
+  }
+
+  return self.location.origin + "/" + String(rawUrl);
+}
+
 messaging.onBackgroundMessage((payload) => {
   const title =
-    payload.notification?.title ||
     payload.data?.title ||
+    payload.notification?.title ||
     "Nova mensagem no Zappi Web";
 
   const body =
-    payload.notification?.body ||
     payload.data?.body ||
+    payload.notification?.body ||
     "Você recebeu uma nova mensagem.";
 
-  const url =
+  const url = getFullUrl(
     payload.data?.url ||
+    payload.data?.click_action ||
     payload.fcmOptions?.link ||
-    "/";
+    "/"
+  );
 
   const options = {
     body,
     icon: "/icon-192.png",
     badge: "/icon-192.png",
-    tag: "zappi-message",
+    tag: "zappi-message-" + Date.now(),
     renotify: true,
     requireInteraction: false,
+    silent: false,
+    vibrate: [250, 120, 250, 120, 250],
     data: {
       url
-    }
+    },
+    actions: [
+      {
+        action: "open",
+        title: "Abrir conversa"
+      }
+    ]
   };
 
   self.registration.showNotification(title, options);
@@ -46,8 +72,7 @@ messaging.onBackgroundMessage((payload) => {
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
 
-  const rawUrl = event.notification?.data?.url || "/";
-  const urlToOpen = new URL(rawUrl, self.location.origin).href;
+  const urlToOpen = getFullUrl(event.notification?.data?.url || "/");
 
   event.waitUntil(
     clients.matchAll({
@@ -60,6 +85,7 @@ self.addEventListener("notificationclick", (event) => {
         if (clientUrl.origin === self.location.origin) {
           if ("navigate" in client) {
             const navigatedClient = await client.navigate(urlToOpen);
+
             if (navigatedClient && "focus" in navigatedClient) {
               return navigatedClient.focus();
             }
@@ -68,7 +94,7 @@ self.addEventListener("notificationclick", (event) => {
           if ("focus" in client) {
             client.postMessage({
               type: "OPEN_CHAT_FROM_NOTIFICATION",
-              url: rawUrl
+              url: urlToOpen
             });
 
             return client.focus();
@@ -79,6 +105,8 @@ self.addEventListener("notificationclick", (event) => {
       if (clients.openWindow) {
         return clients.openWindow(urlToOpen);
       }
+
+      return null;
     })
   );
 });
