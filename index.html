@@ -299,6 +299,14 @@
       text-overflow: ellipsis;
     }
 
+    .time-mini {
+      font-size: 11px;
+      color: #888;
+      white-space: nowrap;
+      align-self: flex-start;
+      padding-top: 3px;
+    }
+
     .empty {
       text-align: center;
       color: #666;
@@ -453,6 +461,15 @@
       font-size: 12px;
       line-height: 1.45;
     }
+
+    .section-title {
+      font-size: 13px;
+      font-weight: 900;
+      color: #075E54;
+      margin: 14px 2px 10px;
+      text-transform: uppercase;
+      letter-spacing: .4px;
+    }
   </style>
 </head>
 <body>
@@ -492,7 +509,7 @@
       </div>
 
       <div class="notice">
-        Zappi Web conectado ao Firebase. Agora falta ativar Authentication anônima e Firestore Database no painel do Firebase.
+        Zappi Web conectado ao Firebase. Esta versão já mostra conversas recebidas mesmo quando o contato ainda não foi salvo.
       </div>
     </div>
   </div>
@@ -552,7 +569,10 @@
   let contacts = [];
   let activeChat = null;
   let activeMessagesUnsubscribe = null;
+  let conversationsUnsubscribe = null;
   let deferredInstallPrompt = null;
+  let lastActiveMessageId = "";
+  let activeTabName = "chats";
 
   const localKey = "zappi_web_v1_data";
 
@@ -588,18 +608,26 @@
     return d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
   }
 
+  function formatTime(timestamp) {
+    if (!timestamp) return "";
+    const d = new Date(timestamp);
+    return d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  }
+
   function loadLocal() {
     try {
       return JSON.parse(localStorage.getItem(localKey)) || {
         user: null,
         contacts: [],
-        messages: {}
+        messages: {},
+        conversations: {}
       };
     } catch {
       return {
         user: null,
         contacts: [],
-        messages: {}
+        messages: {},
+        conversations: {}
       };
     }
   }
@@ -622,7 +650,8 @@
       phone,
       email,
       photoUrl: "",
-      createdAt: Date.now()
+      createdAt: Date.now(),
+      updatedAt: Date.now()
     };
 
     currentUser = user;
@@ -644,6 +673,14 @@
 
     if (savedFirebaseUser) {
       currentUser = JSON.parse(savedFirebaseUser);
+
+      if (firebaseReady) {
+        await db.collection("users").doc(currentUser.id).set({
+          ...currentUser,
+          updatedAt: Date.now()
+        }, { merge: true });
+      }
+
       showHome();
       return;
     }
@@ -664,7 +701,16 @@
     openTab("chats");
   }
 
+  function stopConversationListener() {
+    if (conversationsUnsubscribe) {
+      conversationsUnsubscribe();
+      conversationsUnsubscribe = null;
+    }
+  }
+
   function openTab(tab) {
+    activeTabName = tab;
+
     document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
 
     const tabElements = document.querySelectorAll(".tab");
@@ -673,8 +719,14 @@
     if (tab === "profile") tabElements[2].classList.add("active");
 
     if (tab === "chats") renderChats();
-    if (tab === "contacts") renderContacts();
-    if (tab === "profile") renderProfile();
+    if (tab === "contacts") {
+      stopConversationListener();
+      renderContacts();
+    }
+    if (tab === "profile") {
+      stopConversationListener();
+      renderProfile();
+    }
   }
 
   async function getLocalContacts() {
@@ -713,6 +765,8 @@
         <p class="hint">Se esse telefone já tiver cadastro no Zappi Web, você poderá iniciar conversa.</p>
       </div>
 
+      <div class="section-title">Meus contatos</div>
+
       <div class="list">
         ${
           contacts.length
@@ -745,9 +799,49 @@
     `;
   }
 
+  function conversationItemHtml(c) {
+    const name = c.name || "Contato";
+    const phone = c.phone || "";
+    const lastMessage = c.lastMessage || "Toque para conversar";
+    const time = c.timeText || "";
+
+    return `
+      <div class="contact-item" onclick="openChatFromEncoded('${safeJson(c)}')">
+        <div class="avatar">${initials(name)}</div>
+        <div class="contact-main">
+          <h4>${escapeHtml(name)}</h4>
+          <p>${escapeHtml(lastMessage)}</p>
+        </div>
+        <div class="time-mini">${escapeHtml(time)}</div>
+      </div>
+    `;
+  }
+
   function openChatFromEncoded(encoded) {
     const contact = JSON.parse(decodeURIComponent(encoded));
     openChat(contact);
+  }
+
+  async function getUserById(userId) {
+    if (!firebaseReady || !userId) return null;
+
+    try {
+      const doc = await db.collection("users").doc(userId).get();
+      return doc.exists ? doc.data() : null;
+    } catch {
+      return null;
+    }
+  }
+
+  async function getUserByPhone(phone) {
+    if (!firebaseReady || !phone) return null;
+
+    try {
+      const doc = await db.collection("users").doc("user_" + phone).get();
+      return doc.exists ? doc.data() : null;
+    } catch {
+      return null;
+    }
   }
 
   async function addContact() {
@@ -769,8 +863,7 @@
         return;
       }
 
-      const userDoc = await db.collection("users").doc("user_" + phone).get();
-      const zappiUser = userDoc.exists ? userDoc.data() : null;
+      const zappiUser = await getUserByPhone(phone);
 
       const contact = {
         ownerId: currentUser.id,
@@ -812,7 +905,7 @@
   async function renderChats() {
     await loadContacts();
 
-    const html = `
+    const baseHtml = `
       <div class="profile-box">
         <div class="avatar">${initials(currentUser.name)}</div>
         <div class="profile-info">
@@ -821,16 +914,81 @@
         </div>
       </div>
 
-      <div class="list">
-        ${
-          contacts.length
-          ? contacts.map(c => contactItemHtml(c)).join("")
-          : `<div class="empty">Suas conversas aparecerão aqui.<br>Salve um contato para começar.</div>`
-        }
+      <div class="small-actions" style="margin-bottom:14px;">
+        <button class="btn-light" onclick="renderChats()">Atualizar conversas</button>
+        <button class="btn-primary" onclick="openTab('contacts')">Adicionar contato</button>
+      </div>
+
+      <div class="section-title">Conversas recentes</div>
+
+      <div id="conversationList">
+        <div class="empty">Carregando conversas...</div>
       </div>
     `;
 
-    document.getElementById("tabContent").innerHTML = html;
+    document.getElementById("tabContent").innerHTML = baseHtml;
+
+    if (firebaseReady) {
+      listenConversations();
+    } else {
+      renderLocalChats();
+    }
+  }
+
+  function renderLocalChats() {
+    const list = document.getElementById("conversationList");
+
+    if (!contacts.length) {
+      list.innerHTML = `<div class="empty">Suas conversas aparecerão aqui.<br>Salve um contato para começar.</div>`;
+      return;
+    }
+
+    list.innerHTML = `<div class="list">${contacts.map(c => contactItemHtml(c)).join("")}</div>`;
+  }
+
+  function listenConversations() {
+    stopConversationListener();
+
+    conversationsUnsubscribe = db.collection("conversations")
+      .where("participants", "array-contains", currentUser.id)
+      .onSnapshot(async snapshot => {
+        const convs = snapshot.docs.map(doc => ({ docId: doc.id, ...doc.data() }));
+
+        convs.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+
+        const items = [];
+
+        for (const conv of convs) {
+          const otherId = (conv.participants || []).find(id => id !== currentUser.id);
+          if (!otherId) continue;
+
+          const otherUser = await getUserById(otherId);
+          const participantInfo = conv.participantInfo || {};
+          const fallback = participantInfo[otherId] || {};
+
+          const contact = contacts.find(c => c.contactUserId === otherId || ("user_" + c.phone) === otherId);
+
+          items.push({
+            name: contact?.savedName || contact?.name || otherUser?.name || fallback.name || "Contato",
+            phone: contact?.phone || otherUser?.phone || fallback.phone || "",
+            contactUserId: otherId,
+            photoUrl: otherUser?.photoUrl || fallback.photoUrl || "",
+            lastMessage: conv.lastMessage || "Toque para conversar",
+            timeText: formatTime(conv.updatedAt),
+            fromConversation: true
+          });
+        }
+
+        const list = document.getElementById("conversationList");
+        if (!list) return;
+
+        if (!items.length) {
+          list.innerHTML = `<div class="empty">Suas conversas aparecerão aqui.<br>Salve um contato ou receba uma mensagem.</div>`;
+          return;
+        }
+
+        list.innerHTML = `<div class="list">${items.map(c => conversationItemHtml(c)).join("")}</div>`;
+      });
   }
 
   function renderProfile() {
@@ -885,6 +1043,9 @@
 
   function openChat(contact) {
     activeChat = contact;
+    lastActiveMessageId = "";
+
+    stopConversationListener();
 
     document.getElementById("homeScreen").classList.remove("active");
     document.getElementById("chatScreen").classList.add("active");
@@ -907,7 +1068,7 @@
     activeChat = null;
     document.getElementById("chatScreen").classList.remove("active");
     document.getElementById("homeScreen").classList.add("active");
-    renderChats();
+    openTab("chats");
   }
 
   async function listenMessages() {
@@ -926,6 +1087,21 @@
         .orderBy("createdAt", "asc")
         .onSnapshot(snapshot => {
           const messages = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+          if (messages.length) {
+            const newest = messages[messages.length - 1];
+
+            if (
+              lastActiveMessageId &&
+              newest.id !== lastActiveMessageId &&
+              newest.senderId !== currentUser.id
+            ) {
+              playMessageSound();
+            }
+
+            lastActiveMessageId = newest.id;
+          }
+
           renderMessages(messages);
         });
     } else {
@@ -968,6 +1144,8 @@
     const otherId = activeChat.contactUserId || ("user_" + activeChat.phone);
     const conversationId = getConversationId(currentUser.id, otherId);
 
+    const otherUser = firebaseReady ? await getUserById(otherId) : null;
+
     const message = {
       conversationId,
       senderId: currentUser.id,
@@ -983,10 +1161,25 @@
     if (firebaseReady) {
       const convRef = db.collection("conversations").doc(conversationId);
 
+      const participantInfo = {};
+      participantInfo[currentUser.id] = {
+        name: currentUser.name,
+        phone: currentUser.phone,
+        photoUrl: currentUser.photoUrl || ""
+      };
+
+      participantInfo[otherId] = {
+        name: otherUser?.name || activeChat.name || activeChat.savedName || "Contato",
+        phone: otherUser?.phone || activeChat.phone || "",
+        photoUrl: otherUser?.photoUrl || activeChat.photoUrl || ""
+      };
+
       await convRef.set({
         id: conversationId,
         participants: [currentUser.id, otherId],
+        participantInfo,
         lastMessage: text,
+        lastSenderId: currentUser.id,
         updatedAt: Date.now()
       }, { merge: true });
 
