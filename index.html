@@ -15,624 +15,88 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.4/firebase-messaging-compat.js"></script>
 
   <style>
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-      font-family: Arial, Helvetica, sans-serif;
-    }
-
-    :root {
-      --app-height: 100dvh;
-    }
-
-    html,
-    body {
-      width: 100%;
-      height: 100%;
-      overflow: hidden;
-      background: #d9fdd3;
-      color: #111;
-      overscroll-behavior: none;
-    }
-
-    body {
-      position: fixed;
-      inset: 0;
-    }
-
-    .app {
-      width: 100%;
-      max-width: 480px;
-      height: var(--app-height);
-      min-height: var(--app-height);
-      margin: 0 auto;
-      background: #f4f7f5;
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-      position: relative;
-      box-shadow: 0 0 25px rgba(0,0,0,.2);
-    }
-
-    .screen {
-      display: none;
-      width: 100%;
-      height: 100%;
-      overflow: hidden;
-      position: relative;
-    }
-
-    .screen.active {
-      display: flex;
-      flex-direction: column;
-    }
-
-    .topbar {
-      background: #075E54;
-      color: #fff;
-      padding: 18px 16px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      flex-shrink: 0;
-    }
-
-    .brand h1 {
-      font-size: 22px;
-      font-weight: 800;
-    }
-
-    .brand small {
-      font-size: 12px;
-      opacity: .85;
-    }
-
-    .status-badge {
-      background: rgba(255,255,255,.15);
-      border: 1px solid rgba(255,255,255,.25);
-      color: #fff;
-      padding: 6px 9px;
-      border-radius: 20px;
-      font-size: 11px;
-      white-space: nowrap;
-    }
-
-    .welcome {
-      flex: 1;
-      overflow-y: auto;
-      padding: 28px 20px;
-      display: flex;
-      flex-direction: column;
-      gap: 18px;
-    }
-
-    .hero {
-      background: linear-gradient(135deg, #075E54, #128C7E);
-      color: white;
-      padding: 26px 22px;
-      border-radius: 24px;
-      box-shadow: 0 12px 30px rgba(7,94,84,.25);
-    }
-
-    .hero h2 {
-      font-size: 28px;
-      margin-bottom: 8px;
-    }
-
-    .hero p {
-      line-height: 1.45;
-      opacity: .95;
-      font-size: 15px;
-    }
-
-    .card {
-      background: #fff;
-      padding: 18px;
-      border-radius: 18px;
-      box-shadow: 0 8px 22px rgba(0,0,0,.08);
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-    }
-
-    label {
-      font-size: 13px;
-      font-weight: 700;
-      color: #333;
-    }
-
-    input {
-      width: 100%;
-      padding: 14px;
-      border: 1px solid #d7d7d7;
-      border-radius: 14px;
-      outline: none;
-      font-size: 16px;
-      background: #fff;
-    }
-
-    input:focus {
-      border-color: #128C7E;
-      box-shadow: 0 0 0 3px rgba(18,140,126,.12);
-    }
-
-    button {
-      border: none;
-      padding: 14px 16px;
-      border-radius: 14px;
-      cursor: pointer;
-      font-weight: 800;
-      font-size: 15px;
-    }
-
-    button:active {
-      transform: scale(.98);
-    }
-
-    .btn-primary {
-      background: #128C7E;
-      color: #fff;
-    }
-
-    .btn-dark {
-      background: #075E54;
-      color: #fff;
-    }
-
-    .btn-light {
-      background: #eef6f4;
-      color: #075E54;
-    }
-
-    .btn-danger {
-      background: #ffe8e8;
-      color: #a80000;
-    }
-
-    .hint,
-    .notice {
-      font-size: 12px;
-      line-height: 1.45;
-      color: #666;
-    }
-
-    .notice {
-      background: #eef6ff;
-      border: 1px solid #cfe8ff;
-      color: #16446b;
-      padding: 12px;
-      border-radius: 14px;
-    }
-
-    .tabs {
-      display: flex;
-      background: #075E54;
-      color: white;
-      flex-shrink: 0;
-    }
-
-    .tab {
-      flex: 1;
-      text-align: center;
-      padding: 13px 4px;
-      font-size: 13px;
-      font-weight: 700;
-      opacity: .75;
-      border-bottom: 3px solid transparent;
-      cursor: pointer;
-    }
-
-    .tab.active {
-      opacity: 1;
-      border-bottom-color: white;
-    }
-
-    .content {
-      flex: 1;
-      overflow-y: auto;
-      padding: 14px;
-      -webkit-overflow-scrolling: touch;
-    }
-
-    .profile-box {
-      display: flex;
-      gap: 14px;
-      align-items: center;
-      background: white;
-      padding: 16px;
-      border-radius: 18px;
-      box-shadow: 0 6px 18px rgba(0,0,0,.07);
-      margin-bottom: 14px;
-    }
-
-    .avatar {
-      width: 52px;
-      height: 52px;
-      border-radius: 50%;
-      background: #128C7E;
-      color: white;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      font-weight: 900;
-      font-size: 20px;
-      flex-shrink: 0;
-      overflow: hidden;
-    }
-
-    .avatar.small {
-      width: 42px;
-      height: 42px;
-      font-size: 16px;
-    }
-
-    .profile-info {
-      flex: 1;
-      min-width: 0;
-    }
-
-    .profile-info h3 {
-      font-size: 17px;
-      margin-bottom: 4px;
-    }
-
-    .profile-info p {
-      font-size: 13px;
-      color: #666;
-      word-break: break-word;
-    }
-
-    .list {
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-    }
-
-    .contact-item {
-      background: white;
-      border-radius: 16px;
-      padding: 14px;
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      box-shadow: 0 4px 14px rgba(0,0,0,.06);
-      cursor: pointer;
-      position: relative;
-    }
-
-    .contact-main {
-      flex: 1;
-      min-width: 0;
-    }
-
-    .contact-main h4 {
-      font-size: 15px;
-      margin-bottom: 4px;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    .contact-main p {
-      font-size: 12px;
-      color: #777;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    .contact-main p.unread-text {
-      color: #075E54;
-      font-weight: 800;
-    }
-
-    .time-mini {
-      font-size: 11px;
-      color: #888;
-      white-space: nowrap;
-      align-self: flex-start;
-      padding-top: 3px;
-    }
-
-    .unread-badge {
-      background: #25D366;
-      color: white;
-      font-size: 10px;
-      font-weight: 900;
-      padding: 4px 7px;
-      border-radius: 999px;
-      position: absolute;
-      right: 12px;
-      bottom: 12px;
-    }
-
-    .empty {
-      text-align: center;
-      color: #666;
-      padding: 40px 15px;
-      font-size: 14px;
-      line-height: 1.5;
-    }
-
-    .section-title {
-      font-size: 13px;
-      font-weight: 900;
-      color: #075E54;
-      margin: 14px 2px 10px;
-      text-transform: uppercase;
-      letter-spacing: .4px;
-    }
-
-    .small-actions {
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-    }
-
-    .small-actions button {
-      font-size: 13px;
-      padding: 10px 12px;
-    }
-
-    .pill {
-      display: inline-block;
-      background: #e8f6f3;
-      color: #075E54;
-      padding: 6px 9px;
-      border-radius: 999px;
-      font-size: 12px;
-      font-weight: 800;
-      margin-top: 6px;
-    }
-
-    .install-box {
-      background: #fff8df;
-      border: 1px solid #ffe39c;
-      color: #5b4300;
-      padding: 14px;
-      border-radius: 16px;
-      font-size: 13px;
-      line-height: 1.4;
-      margin-bottom: 14px;
-      display: none;
-    }
-
-    #chatScreen.active {
-      display: block;
-      height: var(--app-height);
-      min-height: var(--app-height);
-      overflow: hidden;
-      background: #efeae2;
-    }
-
-    .chat-head {
-      height: 72px;
-      background: #075E54;
-      color: white;
-      padding: 12px;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      z-index: 20;
-    }
-
-    .back {
-      width: 36px;
-      height: 36px;
-      border-radius: 50%;
-      background: rgba(255,255,255,.14);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 22px;
-      cursor: pointer;
-      flex-shrink: 0;
-    }
-
-    .chat-name {
-      flex: 1;
-      min-width: 0;
-    }
-
-    .chat-name h3 {
-      font-size: 16px;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    .chat-name p {
-      font-size: 11px;
-      opacity: .8;
-    }
-
-    .chat-save-bar {
-      display: none;
-      height: 44px;
-      background: #fff8df;
-      color: #5b4300;
-      padding: 8px 12px;
-      border-bottom: 1px solid #f0d98b;
-      align-items: center;
-      justify-content: space-between;
-      gap: 10px;
-      font-size: 12px;
-      position: absolute;
-      top: 72px;
-      left: 0;
-      right: 0;
-      z-index: 19;
-    }
-
-    .chat-save-bar.active {
-      display: flex;
-    }
-
-    .chat-save-bar button {
-      padding: 8px 10px;
-      font-size: 12px;
-      border-radius: 10px;
-      background: #075E54;
-      color: white;
-      white-space: nowrap;
-    }
-
-    .chat-body {
-      position: absolute;
-      left: 0;
-      right: 0;
-      top: 72px;
-      bottom: 76px;
-      padding: 14px;
-      overflow-y: auto;
-      background: #efeae2;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      -webkit-overflow-scrolling: touch;
-    }
-
-    .chat-body.with-save {
-      top: 116px;
-    }
-
-    .msg {
-      max-width: 78%;
-      padding: 10px 12px;
-      border-radius: 14px;
-      font-size: 14px;
-      line-height: 1.35;
-      box-shadow: 0 1px 2px rgba(0,0,0,.12);
-      word-wrap: break-word;
-      flex-shrink: 0;
-    }
-
-    .msg.me {
-      align-self: flex-end;
-      background: #d9fdd3;
-      border-bottom-right-radius: 4px;
-    }
-
-    .msg.other {
-      align-self: flex-start;
-      background: white;
-      border-bottom-left-radius: 4px;
-    }
-
-    .msg small {
-      display: block;
-      text-align: right;
-      font-size: 10px;
-      opacity: .55;
-      margin-top: 4px;
-    }
-
-    .chat-input {
-      height: 76px;
-      background: #f0f2f5;
-      padding: 10px 10px calc(10px + env(safe-area-inset-bottom));
-      display: flex;
-      gap: 8px;
-      align-items: center;
-      border-top: 1px solid rgba(0,0,0,.08);
-      position: absolute;
-      bottom: 0;
-      left: 0;
-      right: 0;
-      z-index: 25;
-    }
-
-    .chat-input input {
-      border-radius: 22px;
-      padding: 13px 15px;
-      font-size: 16px;
-    }
-
-    .send-btn {
-      width: 48px;
-      height: 48px;
-      border-radius: 50%;
-      background: #128C7E;
-      color: white;
-      font-size: 18px;
-      flex-shrink: 0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-
-    .in-app-toast {
-      position: absolute;
-      top: 14px;
-      left: 14px;
-      right: 14px;
-      z-index: 9999;
-      background: #075E54;
-      color: white;
-      padding: 13px 14px;
-      border-radius: 16px;
-      box-shadow: 0 10px 25px rgba(0,0,0,.25);
-      display: none;
-      align-items: center;
-      gap: 10px;
-      cursor: pointer;
-      animation: slideDown .25s ease-out;
-    }
-
-    .in-app-toast.active {
-      display: flex;
-    }
-
-    .toast-avatar {
-      width: 38px;
-      height: 38px;
-      border-radius: 50%;
-      background: #128C7E;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-weight: 900;
-      flex-shrink: 0;
-    }
-
-    .toast-text {
-      flex: 1;
-      min-width: 0;
-    }
-
-    .toast-text strong,
-    .toast-text span {
-      display: block;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    .toast-text strong {
-      font-size: 14px;
-      margin-bottom: 2px;
-    }
-
-    .toast-text span {
-      font-size: 12px;
-      opacity: .9;
-    }
-
-    @keyframes slideDown {
-      from { transform: translateY(-15px); opacity: 0; }
-      to { transform: translateY(0); opacity: 1; }
-    }
+    *{box-sizing:border-box;margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}
+    :root{--app-height:100dvh}
+    html,body{width:100%;height:100%;overflow:hidden;background:#d9fdd3;color:#111;overscroll-behavior:none}
+    body{position:fixed;inset:0}
+    .app{width:100%;max-width:480px;height:var(--app-height);min-height:var(--app-height);margin:0 auto;background:#f4f7f5;display:flex;flex-direction:column;overflow:hidden;position:relative;box-shadow:0 0 25px rgba(0,0,0,.2)}
+    .screen{display:none;width:100%;height:100%;overflow:hidden;position:relative}
+    .screen.active{display:flex;flex-direction:column}
+    .topbar{background:#075E54;color:#fff;padding:18px 16px;display:flex;justify-content:space-between;align-items:center;flex-shrink:0}
+    .brand h1{font-size:22px;font-weight:800}
+    .brand small{font-size:12px;opacity:.85}
+    .status-badge{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.25);color:#fff;padding:6px 9px;border-radius:20px;font-size:11px;white-space:nowrap}
+    .welcome{flex:1;overflow-y:auto;padding:28px 20px;display:flex;flex-direction:column;gap:18px}
+    .hero{background:linear-gradient(135deg,#075E54,#128C7E);color:white;padding:26px 22px;border-radius:24px;box-shadow:0 12px 30px rgba(7,94,84,.25)}
+    .hero h2{font-size:28px;margin-bottom:8px}
+    .hero p{line-height:1.45;opacity:.95;font-size:15px}
+    .card{background:#fff;padding:18px;border-radius:18px;box-shadow:0 8px 22px rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px}
+    label{font-size:13px;font-weight:700;color:#333}
+    input{width:100%;padding:14px;border:1px solid #d7d7d7;border-radius:14px;outline:none;font-size:16px;background:#fff}
+    input:focus{border-color:#128C7E;box-shadow:0 0 0 3px rgba(18,140,126,.12)}
+    button{border:none;padding:14px 16px;border-radius:14px;cursor:pointer;font-weight:800;font-size:15px}
+    button:active{transform:scale(.98)}
+    .btn-primary{background:#128C7E;color:#fff}
+    .btn-dark{background:#075E54;color:#fff}
+    .btn-light{background:#eef6f4;color:#075E54}
+    .btn-danger{background:#ffe8e8;color:#a80000}
+    .hint,.notice{font-size:12px;line-height:1.45;color:#666}
+    .notice{background:#eef6ff;border:1px solid #cfe8ff;color:#16446b;padding:12px;border-radius:14px}
+    .tabs{display:flex;background:#075E54;color:white;flex-shrink:0}
+    .tab{flex:1;text-align:center;padding:13px 4px;font-size:13px;font-weight:700;opacity:.75;border-bottom:3px solid transparent;cursor:pointer}
+    .tab.active{opacity:1;border-bottom-color:white}
+    .content{flex:1;overflow-y:auto;padding:14px;-webkit-overflow-scrolling:touch}
+    .profile-box{display:flex;gap:14px;align-items:center;background:white;padding:16px;border-radius:18px;box-shadow:0 6px 18px rgba(0,0,0,.07);margin-bottom:14px}
+    .avatar{width:52px;height:52px;border-radius:50%;background:#128C7E;color:white;display:flex;justify-content:center;align-items:center;font-weight:900;font-size:20px;flex-shrink:0;overflow:hidden}
+    .avatar.small{width:42px;height:42px;font-size:16px}
+    .profile-info{flex:1;min-width:0}
+    .profile-info h3{font-size:17px;margin-bottom:4px}
+    .profile-info p{font-size:13px;color:#666;word-break:break-word}
+    .list{display:flex;flex-direction:column;gap:10px}
+    .contact-item{background:white;border-radius:16px;padding:14px;display:flex;align-items:center;gap:12px;box-shadow:0 4px 14px rgba(0,0,0,.06);cursor:pointer;position:relative}
+    .contact-main{flex:1;min-width:0}
+    .contact-main h4{font-size:15px;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .contact-main p{font-size:12px;color:#777;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .contact-main p.unread-text{color:#075E54;font-weight:800}
+    .time-mini{font-size:11px;color:#888;white-space:nowrap;align-self:flex-start;padding-top:3px}
+    .unread-badge{background:#25D366;color:white;font-size:10px;font-weight:900;padding:4px 7px;border-radius:999px;position:absolute;right:12px;bottom:12px}
+    .empty{text-align:center;color:#666;padding:40px 15px;font-size:14px;line-height:1.5}
+    .section-title{font-size:13px;font-weight:900;color:#075E54;margin:14px 2px 10px;text-transform:uppercase;letter-spacing:.4px}
+    .small-actions{display:flex;gap:8px;flex-wrap:wrap}
+    .small-actions button{font-size:13px;padding:10px 12px}
+    .pill{display:inline-block;background:#e8f6f3;color:#075E54;padding:6px 9px;border-radius:999px;font-size:12px;font-weight:800;margin-top:6px}
+    .install-box{background:#fff8df;border:1px solid #ffe39c;color:#5b4300;padding:14px;border-radius:16px;font-size:13px;line-height:1.4;margin-bottom:14px;display:none}
+    #chatScreen.active{display:block;height:var(--app-height);min-height:var(--app-height);overflow:hidden;background:#efeae2}
+    .chat-head{height:72px;background:#075E54;color:white;padding:12px;display:flex;align-items:center;gap:10px;position:absolute;top:0;left:0;right:0;z-index:20}
+    .back{width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.14);display:flex;align-items:center;justify-content:center;font-size:22px;cursor:pointer;flex-shrink:0}
+    .chat-name{flex:1;min-width:0}
+    .chat-name h3{font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .chat-name p{font-size:11px;opacity:.8}
+    .chat-save-bar{display:none;height:44px;background:#fff8df;color:#5b4300;padding:8px 12px;border-bottom:1px solid #f0d98b;align-items:center;justify-content:space-between;gap:10px;font-size:12px;position:absolute;top:72px;left:0;right:0;z-index:19}
+    .chat-save-bar.active{display:flex}
+    .chat-save-bar button{padding:8px 10px;font-size:12px;border-radius:10px;background:#075E54;color:white;white-space:nowrap}
+    .chat-body{position:absolute;left:0;right:0;top:72px;bottom:76px;padding:14px;overflow-y:auto;background:#efeae2;display:flex;flex-direction:column;gap:8px;-webkit-overflow-scrolling:touch}
+    .chat-body.with-save{top:116px}
+    .msg{max-width:78%;padding:10px 12px;border-radius:14px;font-size:14px;line-height:1.35;box-shadow:0 1px 2px rgba(0,0,0,.12);word-wrap:break-word;flex-shrink:0}
+    .msg.me{align-self:flex-end;background:#d9fdd3;border-bottom-right-radius:4px}
+    .msg.other{align-self:flex-start;background:white;border-bottom-left-radius:4px}
+    .msg small{display:block;text-align:right;font-size:10px;opacity:.55;margin-top:4px}
+    .chat-input{height:76px;background:#f0f2f5;padding:10px 10px calc(10px + env(safe-area-inset-bottom));display:flex;gap:8px;align-items:center;border-top:1px solid rgba(0,0,0,.08);position:absolute;bottom:0;left:0;right:0;z-index:25}
+    .chat-input input{border-radius:22px;padding:13px 15px;font-size:16px}
+    .send-btn{width:48px;height:48px;border-radius:50%;background:#128C7E;color:white;font-size:18px;flex-shrink:0;display:flex;align-items:center;justify-content:center}
+    .in-app-toast{position:absolute;top:14px;left:14px;right:14px;z-index:9999;background:#075E54;color:white;padding:13px 14px;border-radius:16px;box-shadow:0 10px 25px rgba(0,0,0,.25);display:none;align-items:center;gap:10px;cursor:pointer;animation:slideDown .25s ease-out}
+    .in-app-toast.active{display:flex}
+    .toast-avatar{width:38px;height:38px;border-radius:50%;background:#128C7E;display:flex;align-items:center;justify-content:center;font-weight:900;flex-shrink:0}
+    .toast-text{flex:1;min-width:0}
+    .toast-text strong,.toast-text span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .toast-text strong{font-size:14px;margin-bottom:2px}
+    .toast-text span{font-size:12px;opacity:.9}
+    @keyframes slideDown{from{transform:translateY(-15px);opacity:0}to{transform:translateY(0);opacity:1}}
   </style>
 </head>
 
 <body>
 <div class="app">
-
   <div id="inAppToast" class="in-app-toast" onclick="openToastConversation()">
     <div class="toast-avatar" id="toastAvatar">Z</div>
     <div class="toast-text">
@@ -659,20 +123,16 @@
       <div class="card">
         <label>Seu nome</label>
         <input id="regName" type="text" placeholder="Ex: Ezequiel Ferreira" />
-
         <label>Seu telefone</label>
         <input id="regPhone" type="tel" placeholder="Ex: 44999999999" />
-
         <label>E-mail, opcional</label>
         <input id="regEmail" type="email" placeholder="Ex: seuemail@gmail.com" />
-
         <button class="btn-primary" onclick="createProfile()">Entrar no Zappi Web</button>
-
         <p class="hint">O telefone será o seu contato Zappi. Outras pessoas poderão te encontrar por ele.</p>
       </div>
 
       <div class="notice">
-        Versão 1.8: mostra o erro técnico real ao ativar notificações.
+        Versão 1.9: corrigida a ativação de notificações no Chrome Android usando ServiceWorkerRegistration.showNotification().
       </div>
     </div>
   </div>
@@ -717,7 +177,6 @@
       <button class="send-btn" onclick="sendMessage()">➤</button>
     </div>
   </div>
-
 </div>
 
 <script>
@@ -1255,7 +714,7 @@
         </div>
 
         <p class="hint">
-          Se der erro, esta versão vai mostrar o código técnico exato para corrigirmos.
+          Se o celular bloquear, libere as notificações nas permissões do site e tente novamente.
         </p>
       </div>
 
@@ -1313,10 +772,8 @@
     }
 
     activeChat = null;
-
     document.getElementById("chatScreen").classList.remove("active");
     document.getElementById("homeScreen").classList.add("active");
-
     openTab("chats");
   }
 
@@ -1421,18 +878,12 @@
     try {
       const receiverDoc = await db.collection("users").doc(receiverId).get();
 
-      if (!receiverDoc.exists) {
-        console.log("Usuário destinatário não encontrado.");
-        return;
-      }
+      if (!receiverDoc.exists) return;
 
       const receiver = receiverDoc.data();
       const tokens = receiver.pushTokens || [];
 
-      if (!tokens.length) {
-        console.log("Destinatário ainda não ativou notificações.");
-        return;
-      }
+      if (!tokens.length) return;
 
       const response = await fetch("/api/sendNotification", {
         method: "POST",
@@ -1510,7 +961,6 @@
       }, { merge: true });
 
       await convRef.collection("messages").add(message);
-
       await sendPushNotificationToUser(otherId, text);
 
     } else {
@@ -1530,9 +980,7 @@
   }
 
   function handleMessageKey(event) {
-    if (event.key === "Enter") {
-      sendMessage();
-    }
+    if (event.key === "Enter") sendMessage();
   }
 
   function playMessageSound() {
@@ -1547,7 +995,6 @@
 
       oscillator.connect(gain);
       gain.connect(ctx.destination);
-
       oscillator.start();
 
       setTimeout(() => {
@@ -1583,27 +1030,29 @@
   }
 
   function openToastConversation() {
-    if (toastConversation) {
-      openChat(toastConversation);
-    }
+    if (toastConversation) openChat(toastConversation);
   }
 
-  function showBrowserNotification(contact) {
+  async function showBrowserNotification(contact) {
     if (!("Notification" in window)) return;
     if (Notification.permission !== "granted") return;
+    if (!("serviceWorker" in navigator)) return;
 
     try {
-      const notification = new Notification("Nova mensagem de " + (contact.name || "Contato"), {
+      const registration = await navigator.serviceWorker.ready;
+
+      await registration.showNotification("Nova mensagem de " + (contact.name || "Contato"), {
         body: contact.lastMessage || "Você recebeu uma nova mensagem.",
         icon: "/icon-192.png",
-        tag: "zappi-message"
+        badge: "/icon-192.png",
+        tag: "zappi-message",
+        data: {
+          url: "/"
+        }
       });
-
-      notification.onclick = () => {
-        window.focus();
-        openChat(contact);
-      };
-    } catch (e) {}
+    } catch (e) {
+      console.error("Erro ao mostrar notificação local:", e);
+    }
   }
 
   async function requestNotificationPermission() {
@@ -1635,7 +1084,7 @@
         return;
       }
 
-      const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js?v=22", {
+      const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js?v=23", {
         scope: "/"
       });
 
@@ -1662,9 +1111,14 @@
 
       localStorage.setItem("zappi_push_token", token);
 
-      new Notification("Zappi Web ativado", {
+      await registration.showNotification("Zappi Web ativado", {
         body: "Este aparelho agora está pronto para receber notificações.",
-        icon: "/icon-192.png"
+        icon: "/icon-192.png",
+        badge: "/icon-192.png",
+        tag: "zappi-ativado",
+        data: {
+          url: "/"
+        }
       });
 
       alert("Notificações ativadas com sucesso neste aparelho.");
@@ -1714,10 +1168,7 @@
 
   function showInstallIfAvailable() {
     const box = document.getElementById("installBox");
-
-    if (box && deferredInstallPrompt) {
-      box.style.display = "block";
-    }
+    if (box && deferredInstallPrompt) box.style.display = "block";
   }
 
   async function installApp() {
