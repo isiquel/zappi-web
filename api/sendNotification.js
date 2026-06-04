@@ -18,6 +18,22 @@ function initFirebaseAdmin() {
   });
 }
 
+function buildAbsoluteUrl(url) {
+  const baseUrl = "https://zappi-web.vercel.app";
+
+  if (!url) return baseUrl + "/";
+
+  if (String(url).startsWith("http://") || String(url).startsWith("https://")) {
+    return String(url);
+  }
+
+  if (String(url).startsWith("/")) {
+    return baseUrl + String(url);
+  }
+
+  return baseUrl + "/" + String(url);
+}
+
 module.exports = async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
@@ -60,25 +76,27 @@ module.exports = async function handler(req, res) {
       });
     }
 
+    const finalTitle = String(title || "Nova mensagem no Zappi Web");
+    const finalBody = String(body || "Você recebeu uma nova mensagem.");
+    const finalUrl = buildAbsoluteUrl(url || "/");
+
     const message = {
       tokens: validTokens,
-      notification: {
-        title: title || "Nova mensagem no Zappi Web",
-        body: body || "Você recebeu uma nova mensagem."
-      },
+
       data: {
-        url: url || "/"
+        title: finalTitle,
+        body: finalBody,
+        url: finalUrl,
+        click_action: finalUrl,
+        type: "zappi_message"
       },
+
       webpush: {
-        notification: {
-          title: title || "Nova mensagem no Zappi Web",
-          body: body || "Você recebeu uma nova mensagem.",
-          icon: "/icon-192.png",
-          badge: "/icon-192.png",
-          requireInteraction: false
-        },
         fcmOptions: {
-          link: url || "/"
+          link: finalUrl
+        },
+        headers: {
+          Urgency: "high"
         }
       }
     };
@@ -88,7 +106,11 @@ module.exports = async function handler(req, res) {
     return res.status(200).json({
       ok: true,
       successCount: response.successCount,
-      failureCount: response.failureCount
+      failureCount: response.failureCount,
+      responses: response.responses.map(item => ({
+        success: item.success,
+        error: item.error ? item.error.message : null
+      }))
     });
 
   } catch (error) {
