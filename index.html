@@ -132,7 +132,7 @@
       </div>
 
       <div class="notice">
-        Versão 1.9: corrigida a ativação de notificações no Chrome Android usando ServiceWorkerRegistration.showNotification().
+        Versão 2.0: notificação abre direto a conversa de quem enviou a mensagem.
       </div>
     </div>
   </div>
@@ -207,6 +207,8 @@
   let toastTimer = null;
   let firstConversationSnapshot = true;
   let firstMessagesSnapshot = true;
+  let pendingOpenChatUserId = null;
+  let deepLinkAlreadyHandled = false;
 
   const localKey = "zappi_web_v1_data";
 
@@ -222,6 +224,14 @@
   if (window.visualViewport) {
     window.visualViewport.addEventListener("resize", setAppHeight);
     window.visualViewport.addEventListener("scroll", setAppHeight);
+  }
+
+  function readDeepLink() {
+    const params = new URLSearchParams(window.location.search);
+    const chat = params.get("chat");
+    if (chat) {
+      pendingOpenChatUserId = chat;
+    }
   }
 
   async function initFirebase() {
@@ -341,6 +351,50 @@
     document.getElementById("homeScreen").classList.add("active");
     document.getElementById("topUserName").innerText = currentUser.name;
     openTab("chats");
+
+    setTimeout(() => {
+      handleDeepLinkOpenChat();
+    }, 900);
+  }
+
+  async function handleDeepLinkOpenChat() {
+    if (deepLinkAlreadyHandled) return;
+    if (!pendingOpenChatUserId) return;
+    if (!firebaseReady || !db || !currentUser) return;
+
+    deepLinkAlreadyHandled = true;
+
+    try {
+      const sender = await getUserById(pendingOpenChatUserId);
+
+      if (!sender) {
+        alert("Não foi possível abrir a conversa da notificação: usuário não encontrado.");
+        return;
+      }
+
+      await loadContacts();
+
+      const savedContact = contacts.find(c => {
+        const cId = c.contactUserId || ("user_" + c.phone);
+        return cId === sender.id;
+      });
+
+      const contactToOpen = savedContact || {
+        name: sender.name || "Contato",
+        savedName: sender.name || "Contato",
+        phone: sender.phone || "",
+        contactUserId: sender.id,
+        photoUrl: sender.photoUrl || ""
+      };
+
+      openChat(contactToOpen);
+
+      const cleanUrl = window.location.origin + window.location.pathname;
+      window.history.replaceState({}, document.title, cleanUrl);
+
+    } catch (error) {
+      console.error("Erro ao abrir conversa pela notificação:", error);
+    }
   }
 
   function stopConversationListener() {
@@ -689,6 +743,10 @@
         }
 
         list.innerHTML = `<div class="list">${items.map(c => conversationItemHtml(c)).join("")}</div>`;
+
+        setTimeout(() => {
+          handleDeepLinkOpenChat();
+        }, 300);
       });
   }
 
@@ -885,6 +943,8 @@
 
       if (!tokens.length) return;
 
+      const deepLinkUrl = "/?chat=" + encodeURIComponent(currentUser.id);
+
       const response = await fetch("/api/sendNotification", {
         method: "POST",
         headers: {
@@ -894,7 +954,7 @@
           tokens,
           title: "Nova mensagem de " + currentUser.name,
           body: messageText,
-          url: "/"
+          url: deepLinkUrl
         })
       });
 
@@ -1047,7 +1107,7 @@
         badge: "/icon-192.png",
         tag: "zappi-message",
         data: {
-          url: "/"
+          url: "/?chat=" + encodeURIComponent(contact.contactUserId || "")
         }
       });
     } catch (e) {
@@ -1084,7 +1144,7 @@
         return;
       }
 
-      const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js?v=23", {
+      const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js?v=24", {
         scope: "/"
       });
 
@@ -1213,6 +1273,7 @@
   });
 
   (async function start() {
+    readDeepLink();
     setAppHeight();
     await initFirebase();
     await checkExistingProfile();
