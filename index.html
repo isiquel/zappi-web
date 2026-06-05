@@ -55,6 +55,7 @@
     .profile-box{display:flex;gap:14px;align-items:center;background:white;padding:16px;border-radius:18px;box-shadow:0 6px 18px rgba(0,0,0,.07);margin-bottom:14px}
     .avatar{width:52px;height:52px;border-radius:50%;background:#128C7E;color:white;display:flex;justify-content:center;align-items:center;font-weight:900;font-size:20px;flex-shrink:0;overflow:hidden;position:relative}
     .avatar.small{width:42px;height:42px;font-size:16px}
+    .avatar.has-status{outline:3px solid #25D366;outline-offset:2px}
     .avatar.big{width:78px;height:78px;font-size:28px}
     .avatar img{width:100%;height:100%;object-fit:cover;display:block}
     .profile-info{flex:1;min-width:0}
@@ -315,7 +316,7 @@
       </div>
 
       <div class="notice">
-        Versão 3.8.1.1: status tipo story corrigido sem nova coleção, mantendo permissões atuais do Firebase.
+        Versão 3.8.2: clique na foto abre o story; clique no nome abre contato/conversa.
       </div>
     </div>
   </div>
@@ -342,7 +343,7 @@
   <div id="chatScreen" class="screen">
     <div class="chat-head">
       <div class="back" onclick="closeChat()">‹</div>
-      <div class="avatar small" id="chatAvatar" onclick="openContactInfo()">C</div>
+      <div class="avatar small" id="chatAvatar" onclick="openActiveChatAvatar(event)">C</div>
       <div class="chat-name" onclick="openContactInfo()">
         <h3 id="chatContactName">Contato</h3>
         <p id="chatContactPhone">telefone</p>
@@ -518,7 +519,7 @@
     if (!("serviceWorker" in navigator)) return null;
 
     try {
-      const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js?v=187", { scope: "/" });
+      const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js?v=188", { scope: "/" });
       await navigator.serviceWorker.ready;
       if (registration && registration.update) registration.update();
       return registration;
@@ -575,6 +576,56 @@
     const avatar = avatarHtml(name, photoData, extraClass);
     if (!hasStatus) return avatar;
     return `<div class="status-avatar-ring ${viewed ? "dim" : ""}">${avatar}</div>`;
+  }
+
+  async function openStatusFromAvatar(event, ownerId, fallbackEncodedContact = "") {
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+
+    if (!ownerId) return;
+
+    await getActiveStatuses();
+
+    if (activeStatusMap[ownerId]) {
+      openStatusViewer(ownerId);
+      return;
+    }
+
+    if (fallbackEncodedContact) {
+      openChatFromEncoded(fallbackEncodedContact);
+      return;
+    }
+
+    if (activeChat) openContactInfo();
+  }
+
+  async function openActiveChatAvatar(event) {
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+
+    if (!activeChat) return;
+
+    const ownerId = activeChat.contactUserId || (activeChat.phone ? "user_" + activeChat.phone : "");
+    await getActiveStatuses();
+
+    if (ownerId && activeStatusMap[ownerId]) {
+      openStatusViewer(ownerId);
+      return;
+    }
+
+    openContactInfo();
+  }
+
+  function updateChatAvatarStatusRing() {
+    const avatar = document.getElementById("chatAvatar");
+    if (!avatar || !activeChat) return;
+
+    const ownerId = activeChat.contactUserId || (activeChat.phone ? "user_" + activeChat.phone : "");
+    avatar.classList.toggle("has-status", !!activeStatusMap[ownerId]);
   }
 
   function nowText() {
@@ -743,7 +794,7 @@
         storyStatuses: nextStatuses,
         lastStoryAt: item.createdAt,
         updatedAt: Date.now(),
-        appVersion: "3.8.1"
+        appVersion: "3.8.2"
       }, { merge: true });
 
       currentUser.storyStatuses = nextStatuses;
@@ -939,7 +990,7 @@
       lastActiveAt: now,
       presenceUpdatedAt: now,
       updatedAt: now,
-      appVersion: "3.8.1"
+      appVersion: "3.8.2"
     };
 
     if (!isOnline) payload.lastSeen = now;
@@ -1015,7 +1066,10 @@
           const photo = activeChatPresence?.photoData || activeChatPresence?.photoUrl || activeChat.photoData || activeChat.photoUrl || "";
           activeChat.statusText = activeChatPresence?.statusText || activeChat.statusText || "";
           const avatar = document.getElementById("chatAvatar");
-          if (avatar) avatar.innerHTML = avatarInnerHtml(name, photo) + (isPresenceOnline(activeChatPresence) ? '<span class="presence-dot"></span>' : '');
+          if (avatar) {
+            avatar.innerHTML = avatarInnerHtml(name, photo) + (isPresenceOnline(activeChatPresence) ? '<span class="presence-dot"></span>' : '');
+            updateChatAvatarStatusRing();
+          }
         } else {
           activeChatPresence = null;
         }
@@ -1046,7 +1100,7 @@
       lastSeen: null,
       lastActiveAt: Date.now(),
       presenceUpdatedAt: Date.now(),
-      appVersion: "3.8.1",
+      appVersion: "3.8.2",
       createdAt: Date.now(),
       updatedAt: Date.now()
     };
@@ -1086,7 +1140,7 @@
           lastActiveAt: Date.now(),
           presenceUpdatedAt: Date.now(),
           updatedAt: Date.now(),
-          appVersion: "3.8.1"
+          appVersion: "3.8.2"
         }, { merge: true });
 
         localStorage.setItem("zappi_current_user", JSON.stringify(currentUser));
@@ -1296,7 +1350,7 @@
 
     return `
       <div class="contact-item" onclick="openChatFromEncoded('${safeJson(c)}')">
-        ${statusAvatarHtml(name, photo, "", hasStatus)}
+        <div onclick="openStatusFromAvatar(event, '${contactId}', '${safeJson(c)}')">${statusAvatarHtml(name, photo, "", hasStatus)}</div>
         <div class="contact-main">
           <h4>${escapeHtml(name)}</h4>
           <p>${escapeHtml(phone)} · Toque para conversar</p>
@@ -1317,7 +1371,7 @@
 
     return `
       <div class="contact-item" onclick="openChatFromEncoded('${safeJson(c)}')">
-        ${avatarMarkup}
+        <div onclick="openStatusFromAvatar(event, '${statusId}', '${safeJson(c)}')">${avatarMarkup}</div>
         <div class="contact-main">
           <h4>${escapeHtml(c.name || "Contato")}</h4>
           <p class="${unread ? "unread-text" : ""}">
@@ -1789,7 +1843,7 @@
         await db.collection("users").doc(currentUser.id).set({
           statusText,
           updatedAt: Date.now(),
-          appVersion: "3.8.1"
+          appVersion: "3.8.2"
         }, { merge: true });
 
         await updateMyStatusInConversations(statusText);
@@ -1939,6 +1993,7 @@
     stopActiveChatPresenceListener();
     hideToast();
     await loadContacts();
+    await getActiveStatuses();
 
     document.getElementById("homeScreen").classList.remove("active");
     document.getElementById("chatScreen").classList.add("active");
@@ -1952,6 +2007,7 @@
     document.getElementById("chatContactPhone").innerText = contact.phone || "";
     document.getElementById("chatContactPhone").classList.remove("typing", "online");
     document.getElementById("chatAvatar").innerHTML = avatarInnerHtml(name, photo);
+    updateChatAvatarStatusRing();
 
     setMyPresence(true);
     updateSaveContactBar();
@@ -3617,7 +3673,7 @@
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", async () => {
       try {
-        await navigator.serviceWorker.register("sw.js?v=187");
+        await navigator.serviceWorker.register("sw.js?v=188");
       } catch (error) {
         console.error(error);
       }
