@@ -127,6 +127,13 @@
     .call-audio-controls.active{display:flex}
     .call-audio-controls button{height:38px;border-radius:999px;padding:0 14px;background:#eaf3f1;color:#075E54;font-size:12px;font-weight:900}
     .call-audio-controls input{width:120px;accent-color:#128C7E}
+    .call-video-area{width:100%;display:none;position:relative;background:#111;border-radius:20px;overflow:hidden;min-height:220px;border:1px solid rgba(0,0,0,.08)}
+    .call-video-area.active{display:block}
+    .remote-call-video{width:100%;height:260px;object-fit:cover;background:#111;display:block}
+    .local-call-video{position:absolute;right:10px;bottom:10px;width:92px;height:128px;object-fit:cover;background:#222;border-radius:14px;border:2px solid rgba(255,255,255,.85);box-shadow:0 4px 14px rgba(0,0,0,.35)}
+    .call-media-controls{width:100%;display:none;gap:8px;align-items:center;justify-content:center;flex-wrap:wrap}
+    .call-media-controls.active{display:flex}
+    .call-media-controls button{height:38px;border-radius:999px;padding:0 12px;background:#eaf3f1;color:#075E54;font-size:12px;font-weight:900}
     .call-volume-label{font-size:12px;color:#666;font-weight:800}
     .btn-call-end{background:#e53935;color:#fff}
     .btn-call-accept{background:#128C7E;color:#fff}
@@ -373,6 +380,7 @@
         <p id="chatContactPhone">telefone</p>
       </div>
       <button class="chat-call-btn" onclick="startAudioCall()" title="Ligação de áudio">📞 <span>Ligar</span></button>
+      <button class="chat-call-btn" onclick="startVideoCall()" title="Ligação de vídeo">🎥 <span>Vídeo</span></button>
       <button class="chat-clear-btn" onclick="clearActiveConversationUnfavorited()" title="Limpar conversa">🧹 <span>Limpar</span></button>
     </div>
 
@@ -425,7 +433,15 @@
       <div id="callAvatar" class="call-avatar">Z</div>
       <h2 id="callTitle">Ligação de áudio</h2>
       <p id="callSubtitle">Preparando chamada...</p>
+      <div id="callVideoArea" class="call-video-area">
+        <video id="remoteCallVideo" class="remote-call-video" autoplay playsinline></video>
+        <video id="localCallVideo" class="local-call-video" autoplay playsinline muted></video>
+      </div>
       <audio id="remoteCallAudio" autoplay playsinline></audio>
+      <div id="callMediaControls" class="call-media-controls">
+        <button id="callMuteBtn" onclick="toggleCallMicrophone()">🎙️ Microfone</button>
+        <button id="callCameraBtn" onclick="toggleCallCamera()">📷 Câmera</button>
+      </div>
       <div id="callAudioControls" class="call-audio-controls">
         <button id="callOutputBtn" onclick="toggleCallAudioOutput()">🔈 Baixo</button>
         <span class="call-volume-label">Volume</span>
@@ -510,6 +526,7 @@
   let currentCallId = "";
   let currentCallRole = "";
   let currentCallData = null;
+  let currentCallMediaType = "audio";
   let currentPeerConnection = null;
   let localCallStream = null;
   let addedRemoteCandidates = {};
@@ -2256,6 +2273,53 @@
     }
   }
 
+
+  function callTypeLabel(type = currentCallMediaType) {
+    return type === "video" ? "vídeo" : "áudio";
+  }
+
+  function updateCallMediaButtons() {
+    const muteBtn = document.getElementById("callMuteBtn");
+    const cameraBtn = document.getElementById("callCameraBtn");
+    const mediaControls = document.getElementById("callMediaControls");
+    const videoArea = document.getElementById("callVideoArea");
+    const hasVideo = currentCallMediaType === "video";
+
+    if (mediaControls) mediaControls.classList.toggle("active", !!currentCallId);
+    if (videoArea) videoArea.classList.toggle("active", hasVideo && !!currentCallId);
+
+    if (muteBtn && localCallStream) {
+      const audioTrack = localCallStream.getAudioTracks()[0];
+      muteBtn.innerText = audioTrack && audioTrack.enabled ? "🎙️ Microfone" : "🔇 Mutado";
+    }
+    if (cameraBtn) {
+      cameraBtn.style.display = hasVideo ? "inline-flex" : "none";
+      const videoTrack = localCallStream ? localCallStream.getVideoTracks()[0] : null;
+      cameraBtn.innerText = videoTrack && videoTrack.enabled ? "📷 Câmera" : "🚫 Câmera";
+    }
+  }
+
+  function attachLocalVideoPreview() {
+    const localVideo = document.getElementById("localCallVideo");
+    if (localVideo && localCallStream && currentCallMediaType === "video") {
+      localVideo.srcObject = localCallStream;
+      localVideo.play().catch(() => {});
+    }
+    updateCallMediaButtons();
+  }
+
+  function toggleCallMicrophone() {
+    if (!localCallStream) return;
+    localCallStream.getAudioTracks().forEach(track => track.enabled = !track.enabled);
+    updateCallMediaButtons();
+  }
+
+  function toggleCallCamera() {
+    if (!localCallStream) return;
+    localCallStream.getVideoTracks().forEach(track => track.enabled = !track.enabled);
+    updateCallMediaButtons();
+  }
+
   function callContactName() {
     return activeChat?.name || activeChat?.savedName || activeChatPresence?.name || "Contato";
   }
@@ -2296,6 +2360,7 @@
     if (callAudioVolume >= 0.75) callAudioMode = "speaker";
     localStorage.setItem("zappi_call_audio_mode", callAudioMode);
     applyCallAudioSettings();
+    updateCallMediaButtons();
   }
 
   function toggleCallAudioOutput() {
@@ -2317,7 +2382,7 @@
     }
   }
 
-  function setCallOverlay({ mode, title, subtitle, showAccept = false, showDecline = false, showEnd = true }) {
+  function setCallOverlay({ mode, title, subtitle, showAccept = false, showDecline = false, showEnd = true, callType = currentCallMediaType }) {
     const overlay = document.getElementById("callOverlay");
     const avatar = document.getElementById("callAvatar");
     const titleEl = document.getElementById("callTitle");
@@ -2328,7 +2393,8 @@
     const name = callContactName();
     const photo = callContactPhoto();
     avatar.innerHTML = avatarInnerHtml(name, photo);
-    titleEl.innerText = title || "Ligação de áudio";
+    currentCallMediaType = callType || currentCallMediaType || "audio";
+    titleEl.innerText = title || ("Ligação de " + callTypeLabel(currentCallMediaType));
     subEl.innerText = subtitle || "";
 
     const buttons = [];
@@ -2345,14 +2411,22 @@
     if (overlay) overlay.classList.remove("active");
     const controls = document.getElementById("callAudioControls");
     if (controls) controls.classList.remove("active");
+    const mediaControls = document.getElementById("callMediaControls");
+    if (mediaControls) mediaControls.classList.remove("active");
+    const videoArea = document.getElementById("callVideoArea");
+    if (videoArea) videoArea.classList.remove("active");
   }
 
-  async function ensureLocalCallStream() {
+  async function ensureLocalCallStream(type = currentCallMediaType) {
     if (localCallStream) return localCallStream;
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      throw new Error("Este navegador não permite ligação de áudio.");
+      throw new Error("Este navegador não permite ligação de " + callTypeLabel(type) + ".");
     }
-    localCallStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    const constraints = type === "video"
+      ? { audio: true, video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } } }
+      : { audio: true, video: false };
+    localCallStream = await navigator.mediaDevices.getUserMedia(constraints);
+    attachLocalVideoPreview();
     return localCallStream;
   }
 
@@ -2365,12 +2439,20 @@
     });
 
     pc.ontrack = event => {
+      const remoteStream = event.streams && event.streams[0] ? event.streams[0] : null;
+      if (!remoteStream) return;
       const audio = document.getElementById("remoteCallAudio");
-      if (audio && event.streams && event.streams[0]) {
-        audio.srcObject = event.streams[0];
+      const video = document.getElementById("remoteCallVideo");
+      if (audio) {
+        audio.srcObject = remoteStream;
         applyCallAudioSettings();
         audio.play().catch(() => {});
       }
+      if (video && currentCallMediaType === "video") {
+        video.srcObject = remoteStream;
+        video.play().catch(() => {});
+      }
+      updateCallMediaButtons();
     };
 
     pc.onconnectionstatechange = () => {
@@ -2397,15 +2479,25 @@
     return pc;
   }
 
-  async function addLocalTracksToPeer(pc) {
-    const stream = await ensureLocalCallStream();
+  async function addLocalTracksToPeer(pc, type = currentCallMediaType) {
+    const stream = await ensureLocalCallStream(type);
     stream.getTracks().forEach(track => pc.addTrack(track, stream));
+    attachLocalVideoPreview();
   }
 
   async function startAudioCall() {
+    return startCall("audio");
+  }
+
+  async function startVideoCall() {
+    return startCall("video");
+  }
+
+  async function startCall(type = "audio") {
     if (!activeChat) return alert("Abra uma conversa primeiro.");
     if (!firebaseReady || !db) return alert("A ligação precisa do Firebase conectado.");
     if (currentCallId) return alert("Você já está em uma chamada.");
+    currentCallMediaType = type;
 
     const meta = getActiveConversationMeta();
     if (!meta) return alert("Não foi possível iniciar a ligação.");
@@ -2419,17 +2511,18 @@
       setCallOverlay({
         title: "Chamando " + callContactName(),
         subtitle: "Aguardando a pessoa atender...",
-        showEnd: true
+        showEnd: true,
+        callType: type
       });
 
       const pc = createAudioPeerConnection("caller");
-      await addLocalTracksToPeer(pc);
+      await addLocalTracksToPeer(pc, type);
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
 
       const callData = {
         id: currentCallId,
-        type: "audio",
+        type: type,
         status: "ringing",
         callerId: currentUser.id,
         callerName: currentUser.name || "Contato",
@@ -2446,7 +2539,7 @@
       await db.collection("conversations").doc(meta.conversationId).set({ activeCall: callData }, { merge: true });
     } catch (error) {
       console.error("Erro ao iniciar ligação:", error);
-      alert(error.message || "Não foi possível iniciar a ligação.");
+      alert(error.message || "Não foi possível iniciar a ligação de " + callTypeLabel(type) + ".");
       await cleanupAudioCall(false);
     }
   }
@@ -2467,6 +2560,7 @@
       if (!involved) return;
 
       currentCallData = call;
+      currentCallMediaType = call.type || "audio";
 
       if ((call.status === "ended" || call.status === "declined") && currentCallId === call.id) {
         const wasDeclined = call.status === "declined";
@@ -2481,11 +2575,12 @@
         addedRemoteCandidates = {};
         remoteDescriptionApplied = false;
         setCallOverlay({
-          title: "Ligação de " + (call.callerName || callContactName()),
-          subtitle: "Chamada de áudio recebida",
+          title: "Ligação de " + callTypeLabel(call.type) + " de " + (call.callerName || callContactName()),
+          subtitle: "Chamada de " + callTypeLabel(call.type) + " recebida",
           showAccept: true,
           showDecline: true,
-          showEnd: false
+          showEnd: false,
+          callType: call.type || "audio"
         });
         startCallRingtone();
         return;
@@ -2494,8 +2589,9 @@
       if (call.status === "accepted" && currentCallId === call.id) {
         setCallOverlay({
           title: "Em ligação com " + callContactName(),
-          subtitle: "Ligação de áudio ativa",
-          showEnd: true
+          subtitle: "Ligação de " + callTypeLabel(call.type) + " ativa",
+          showEnd: true,
+          callType: call.type || "audio"
         });
         await applyRemoteCallData(call);
       }
@@ -2504,7 +2600,8 @@
         setCallOverlay({
           title: "Chamando " + callContactName(),
           subtitle: "Aguardando a pessoa atender...",
-          showEnd: true
+          showEnd: true,
+          callType: call.type || "audio"
         });
       }
     }, error => console.error("Erro ouvindo ligação:", error));
@@ -2517,9 +2614,10 @@
 
     try {
       stopCallRingtone();
-      setCallOverlay({ title: "Atendendo...", subtitle: "Conectando áudio...", showEnd: true });
+      currentCallMediaType = currentCallData.type || "audio";
+      setCallOverlay({ title: "Atendendo...", subtitle: "Conectando " + callTypeLabel(currentCallMediaType) + "...", showEnd: true, callType: currentCallMediaType });
       const pc = createAudioPeerConnection("receiver");
-      await addLocalTracksToPeer(pc);
+      await addLocalTracksToPeer(pc, currentCallMediaType);
       await pc.setRemoteDescription(new RTCSessionDescription(currentCallData.offer));
       remoteDescriptionApplied = true;
       const answer = await pc.createAnswer();
@@ -2608,10 +2706,15 @@
 
     const audio = document.getElementById("remoteCallAudio");
     if (audio) audio.srcObject = null;
+    const remoteVideo = document.getElementById("remoteCallVideo");
+    if (remoteVideo) remoteVideo.srcObject = null;
+    const localVideo = document.getElementById("localCallVideo");
+    if (localVideo) localVideo.srcObject = null;
 
     currentCallId = "";
     currentCallRole = "";
     currentCallData = null;
+    currentCallMediaType = "audio";
     addedRemoteCandidates = {};
     remoteDescriptionApplied = false;
     hideCallOverlay();
