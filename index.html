@@ -315,7 +315,7 @@
       </div>
 
       <div class="notice">
-        Versão 3.8: status tipo story com texto/foto, informações do contato, mensagens favoritas e status/recado.
+        Versão 3.8.1.1: status tipo story corrigido sem nova coleção, mantendo permissões atuais do Firebase.
       </div>
     </div>
   </div>
@@ -518,7 +518,7 @@
     if (!("serviceWorker" in navigator)) return null;
 
     try {
-      const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js?v=186", { scope: "/" });
+      const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js?v=187", { scope: "/" });
       await navigator.serviceWorker.ready;
       if (registration && registration.update) registration.update();
       return registration;
@@ -648,11 +648,34 @@
 
     if (firebaseReady) {
       try {
-        const snap = await db.collection("statuses")
-          .where("createdAt", ">=", cutoff)
-          .orderBy("createdAt", "desc")
-          .get();
-        items = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        const ownerIds = new Set();
+        if (currentUser?.id) ownerIds.add(currentUser.id);
+
+        (contacts || []).forEach(contact => {
+          const id = contact.contactUserId || (contact.phone ? "user_" + contact.phone : "");
+          if (id) ownerIds.add(id);
+        });
+
+        for (const ownerId of ownerIds) {
+          const doc = await db.collection("users").doc(ownerId).get();
+          if (!doc.exists) continue;
+
+          const userData = doc.data() || {};
+          const storyStatuses = Array.isArray(userData.storyStatuses) ? userData.storyStatuses : [];
+
+          storyStatuses
+            .filter(s => (s.createdAt || 0) >= cutoff)
+            .forEach(s => {
+              items.push({
+                ...s,
+                ownerId: userData.id || ownerId,
+                ownerName: userData.name || s.ownerName || "Contato",
+                ownerPhone: userData.phone || s.ownerPhone || "",
+                ownerPhotoData: userData.photoData || s.ownerPhotoData || "",
+                ownerPhotoUrl: userData.photoUrl || s.ownerPhotoUrl || ""
+              });
+            });
+        }
       } catch (error) {
         console.error("Erro ao carregar status:", error);
       }
@@ -694,6 +717,7 @@
     if (!currentUser) return;
 
     const item = {
+      id: "status_" + Date.now(),
       ownerId: currentUser.id,
       ownerName: currentUser.name || "Você",
       ownerPhone: currentUser.phone || "",
@@ -708,11 +732,26 @@
     if (!item.text && !item.imageData) return alert("Digite algo ou escolha uma foto para o status.");
 
     if (firebaseReady) {
-      await db.collection("statuses").add(item);
+      const cutoff = statusCutoffTime();
+      const userRef = db.collection("users").doc(currentUser.id);
+      const userDoc = await userRef.get();
+      const userData = userDoc.exists ? (userDoc.data() || {}) : {};
+      const oldStatuses = Array.isArray(userData.storyStatuses) ? userData.storyStatuses : [];
+      const nextStatuses = [item, ...oldStatuses.filter(s => (s.createdAt || 0) >= cutoff)].slice(0, 15);
+
+      await userRef.set({
+        storyStatuses: nextStatuses,
+        lastStoryAt: item.createdAt,
+        updatedAt: Date.now(),
+        appVersion: "3.8.1"
+      }, { merge: true });
+
+      currentUser.storyStatuses = nextStatuses;
+      currentUser.lastStoryAt = item.createdAt;
+      updateLocalCurrentUser();
     } else {
       const data = loadLocal();
       if (!data.statuses) data.statuses = [];
-      item.id = "status_" + Date.now();
       data.statuses.unshift(item);
       saveLocal(data);
     }
@@ -900,7 +939,7 @@
       lastActiveAt: now,
       presenceUpdatedAt: now,
       updatedAt: now,
-      appVersion: "3.8"
+      appVersion: "3.8.1"
     };
 
     if (!isOnline) payload.lastSeen = now;
@@ -1007,7 +1046,7 @@
       lastSeen: null,
       lastActiveAt: Date.now(),
       presenceUpdatedAt: Date.now(),
-      appVersion: "3.8",
+      appVersion: "3.8.1",
       createdAt: Date.now(),
       updatedAt: Date.now()
     };
@@ -1047,7 +1086,7 @@
           lastActiveAt: Date.now(),
           presenceUpdatedAt: Date.now(),
           updatedAt: Date.now(),
-          appVersion: "3.8"
+          appVersion: "3.8.1"
         }, { merge: true });
 
         localStorage.setItem("zappi_current_user", JSON.stringify(currentUser));
@@ -1750,7 +1789,7 @@
         await db.collection("users").doc(currentUser.id).set({
           statusText,
           updatedAt: Date.now(),
-          appVersion: "3.8"
+          appVersion: "3.8.1"
         }, { merge: true });
 
         await updateMyStatusInConversations(statusText);
@@ -3578,7 +3617,7 @@
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", async () => {
       try {
-        await navigator.serviceWorker.register("sw.js?v=186");
+        await navigator.serviceWorker.register("sw.js?v=187");
       } catch (error) {
         console.error(error);
       }
