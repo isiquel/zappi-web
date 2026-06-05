@@ -1,19 +1,6 @@
-importScripts("https://www.gstatic.com/firebasejs/10.12.4/firebase-app-compat.js");
-importScripts("https://www.gstatic.com/firebasejs/10.12.4/firebase-messaging-compat.js");
-
-firebase.initializeApp({
-  apiKey: "AIzaSyBXQJGJPREafTPDIpbzDSSov2Ju3kvei3w",
-  authDomain: "zappi-web.firebaseapp.com",
-  projectId: "zappi-web",
-  storageBucket: "zappi-web.firebasestorage.app",
-  messagingSenderId: "675790989502",
-  appId: "1:675790989502:web:36a7f3d1bcbb3bfb1b96ef"
-});
-
-const messaging = firebase.messaging();
 const APP_ORIGIN = "https://zappi-web.vercel.app";
 
-self.addEventListener("install", () => {
+self.addEventListener("install", (event) => {
   self.skipWaiting();
 });
 
@@ -37,25 +24,39 @@ function fullUrl(rawUrl) {
   return APP_ORIGIN + "/" + value;
 }
 
-messaging.onBackgroundMessage((payload) => {
-  const title =
-    payload.data?.title ||
-    payload.notification?.title ||
-    "Nova mensagem no Zappi Web";
+function getPayloadData(event) {
+  try {
+    if (!event.data) return {};
 
-  const body =
-    payload.data?.body ||
-    payload.notification?.body ||
-    "Você recebeu uma nova mensagem.";
+    const payload = event.data.json();
 
-  const url = fullUrl(
-    payload.data?.url ||
-    payload.data?.click_action ||
-    payload.fcmOptions?.link ||
-    "/"
-  );
+    if (payload.data) {
+      return payload.data;
+    }
 
-  self.registration.showNotification(title, {
+    if (payload.notification) {
+      return {
+        title: payload.notification.title,
+        body: payload.notification.body,
+        url: payload.fcmOptions?.link || payload.notification.click_action || "/"
+      };
+    }
+
+    return payload;
+  } catch (error) {
+    console.error("Erro ao ler payload push:", error);
+    return {};
+  }
+}
+
+self.addEventListener("push", (event) => {
+  const data = getPayloadData(event);
+
+  const title = data.title || "Nova mensagem no Zappi Web";
+  const body = data.body || "Você recebeu uma nova mensagem.";
+  const url = fullUrl(data.url || data.click_action || "/");
+
+  const options = {
     body,
     icon: "/icon-192.png",
     badge: "/icon-192.png",
@@ -67,13 +68,17 @@ messaging.onBackgroundMessage((payload) => {
     data: {
       url
     }
-  });
+  };
+
+  event.waitUntil(
+    self.registration.showNotification(title, options)
+  );
 });
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
 
-  const targetUrl = fullUrl(event.notification?.data?.url || "/");
+  const urlToOpen = fullUrl(event.notification?.data?.url || "/");
 
   event.waitUntil(
     (async () => {
@@ -87,28 +92,23 @@ self.addEventListener("notificationclick", (event) => {
           const clientUrl = new URL(client.url);
 
           if (clientUrl.origin === APP_ORIGIN) {
-            client.postMessage({
-              type: "ZAPPI_OPEN_URL",
-              url: targetUrl
-            });
-
-            if ("navigate" in client) {
-              await client.navigate(targetUrl);
-            }
-
             if ("focus" in client) {
               await client.focus();
+            }
+
+            if ("navigate" in client) {
+              await client.navigate(urlToOpen);
             }
 
             return;
           }
         } catch (error) {
-          console.error("Erro ao tentar abrir janela existente:", error);
+          console.error("Erro ao focar app aberto:", error);
         }
       }
 
       if (clients.openWindow) {
-        return clients.openWindow(targetUrl);
+        return clients.openWindow(urlToOpen);
       }
 
       return null;
