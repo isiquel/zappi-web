@@ -882,7 +882,7 @@
         storyStatuses: nextStatuses,
         lastStoryAt: item.createdAt,
         updatedAt: Date.now(),
-        appVersion: "4.1.4"
+        appVersion: "4.1.5"
       }, { merge: true });
 
       currentUser.storyStatuses = nextStatuses;
@@ -1033,9 +1033,6 @@
     if (!currentUser || !firebaseReady || !db || !ownerId || !statusId) return;
     try {
       const ownerRef = db.collection("users").doc(ownerId);
-      const ownerDoc = await ownerRef.get();
-      if (!ownerDoc.exists) return;
-      const ownerData = ownerDoc.data() || {};
       const cutoff = statusCutoffTime();
       const viewer = {
         id: currentUser.id,
@@ -1043,17 +1040,43 @@
         phone: currentUser.phone || "",
         at: Date.now()
       };
-      const nextStatuses = (Array.isArray(ownerData.storyStatuses) ? ownerData.storyStatuses : [])
-        .filter(s => (s.createdAt || 0) >= cutoff)
-        .map(s => {
-          if (!s || s.id !== statusId) return s;
-          const viewedBy = Array.isArray(s.viewedBy) ? s.viewedBy.filter(v => v && v.id !== currentUser.id) : [];
-          const likedBy = Array.isArray(s.likedBy) ? s.likedBy.filter(v => v && v.id !== currentUser.id) : [];
-          viewedBy.push(viewer);
-          if (action === "like") likedBy.push(viewer);
-          return { ...s, viewedBy, likedBy, updatedAt: Date.now() };
+
+      let nextStatuses = [];
+
+      if (typeof db.runTransaction === "function") {
+        await db.runTransaction(async transaction => {
+          const ownerDoc = await transaction.get(ownerRef);
+          if (!ownerDoc.exists) return;
+          const ownerData = ownerDoc.data() || {};
+          nextStatuses = (Array.isArray(ownerData.storyStatuses) ? ownerData.storyStatuses : [])
+            .filter(s => (s.createdAt || 0) >= cutoff)
+            .map(s => {
+              if (!s || s.id !== statusId) return s;
+              const viewedBy = Array.isArray(s.viewedBy) ? s.viewedBy.filter(v => v && v.id !== currentUser.id) : [];
+              const likedBy = Array.isArray(s.likedBy) ? s.likedBy.filter(v => v && v.id !== currentUser.id) : [];
+              viewedBy.push({ ...viewer, at: Date.now() });
+              if (action === "like") likedBy.push({ ...viewer, at: Date.now() });
+              return { ...s, viewedBy, likedBy, updatedAt: Date.now() };
+            });
+          transaction.set(ownerRef, { storyStatuses: nextStatuses, updatedAt: Date.now() }, { merge: true });
         });
-      await ownerRef.set({ storyStatuses: nextStatuses, updatedAt: Date.now() }, { merge: true });
+      } else {
+        const ownerDoc = await ownerRef.get();
+        if (!ownerDoc.exists) return;
+        const ownerData = ownerDoc.data() || {};
+        nextStatuses = (Array.isArray(ownerData.storyStatuses) ? ownerData.storyStatuses : [])
+          .filter(s => (s.createdAt || 0) >= cutoff)
+          .map(s => {
+            if (!s || s.id !== statusId) return s;
+            const viewedBy = Array.isArray(s.viewedBy) ? s.viewedBy.filter(v => v && v.id !== currentUser.id) : [];
+            const likedBy = Array.isArray(s.likedBy) ? s.likedBy.filter(v => v && v.id !== currentUser.id) : [];
+            viewedBy.push(viewer);
+            if (action === "like") likedBy.push(viewer);
+            return { ...s, viewedBy, likedBy, updatedAt: Date.now() };
+          });
+        await ownerRef.set({ storyStatuses: nextStatuses, updatedAt: Date.now() }, { merge: true });
+      }
+
       if (ownerId === currentUser.id) {
         currentUser.storyStatuses = nextStatuses;
         updateLocalCurrentUser();
@@ -1072,11 +1095,12 @@
   async function likeStatus(ownerId, statusId) {
     await updateStatusInteraction(ownerId, statusId, "like");
     await getActiveStatuses();
-    if (currentStatusOwnerId === ownerId) openStatusViewer(ownerId, true);
+    if (currentStatusOwnerId === ownerId) await openStatusViewer(ownerId, true, true);
     showToast("Status curtido.", "success");
   }
 
-  function openStatusViewer(ownerId, keepOpen = false) {
+  async function openStatusViewer(ownerId, keepOpen = false, skipRefresh = false) {
+    if (!skipRefresh) await getActiveStatuses();
     currentStatusOwnerId = ownerId;
     const items = statusFeedCache.filter(s => s.ownerId === ownerId).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
     const overlay = document.getElementById("statusViewerOverlay");
@@ -1298,7 +1322,7 @@
           storyStatuses: fresh,
           lastStoryAt: fresh[0]?.createdAt || 0,
           updatedAt: Date.now(),
-          appVersion: "4.1.4"
+          appVersion: "4.1.5"
         }, { merge: true });
 
         currentUser.storyStatuses = fresh;
@@ -1365,7 +1389,7 @@
       lastActiveAt: now,
       presenceUpdatedAt: now,
       updatedAt: now,
-      appVersion: "4.1.4"
+      appVersion: "4.1.5"
     };
 
     if (!isOnline) payload.lastSeen = now;
@@ -1475,7 +1499,7 @@
       lastSeen: null,
       lastActiveAt: Date.now(),
       presenceUpdatedAt: Date.now(),
-      appVersion: "4.1.4",
+      appVersion: "4.1.5",
       createdAt: Date.now(),
       updatedAt: Date.now()
     };
@@ -1515,7 +1539,7 @@
           lastActiveAt: Date.now(),
           presenceUpdatedAt: Date.now(),
           updatedAt: Date.now(),
-          appVersion: "4.1.4"
+          appVersion: "4.1.5"
         }, { merge: true });
 
         localStorage.setItem("zappi_current_user", JSON.stringify(currentUser));
@@ -2219,7 +2243,7 @@
         await db.collection("users").doc(currentUser.id).set({
           statusText,
           updatedAt: Date.now(),
-          appVersion: "4.1.4"
+          appVersion: "4.1.5"
         }, { merge: true });
 
         await updateMyStatusInConversations(statusText);
