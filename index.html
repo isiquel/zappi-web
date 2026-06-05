@@ -113,6 +113,18 @@
     .favorite-item{background:#fff;border:1px solid #e7eeee;border-radius:14px;padding:10px;font-size:13px;color:#333;line-height:1.35}
     .favorite-item small{display:block;color:#777;margin-top:4px;font-size:11px}
 
+    .chat-call-btn{height:38px;border-radius:999px;background:rgba(255,255,255,.16);color:#fff;padding:0 10px;font-size:12px;font-weight:900;display:flex;align-items:center;justify-content:center;gap:4px;flex-shrink:0;white-space:nowrap;border:1px solid rgba(255,255,255,.18)}
+    .call-overlay{position:absolute;inset:0;background:rgba(0,0,0,.55);z-index:99995;display:none;align-items:center;justify-content:center;padding:18px}
+    .call-overlay.active{display:flex}
+    .call-box{width:100%;max-width:380px;background:#fff;border-radius:26px;padding:22px;box-shadow:0 15px 35px rgba(0,0,0,.35);display:flex;flex-direction:column;align-items:center;text-align:center;gap:14px}
+    .call-box h2{font-size:22px;color:#075E54}
+    .call-box p{font-size:13px;color:#666;line-height:1.4}
+    .call-avatar{width:86px;height:86px;border-radius:50%;background:#128C7E;color:#fff;display:flex;align-items:center;justify-content:center;font-size:30px;font-weight:900;overflow:hidden}
+    .call-avatar img{width:100%;height:100%;object-fit:cover}
+    .call-actions{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;width:100%}
+    .call-actions button{min-width:118px}
+    .btn-call-end{background:#e53935;color:#fff}
+    .btn-call-accept{background:#128C7E;color:#fff}
     .chat-save-bar{display:none;height:44px;background:#fff8df;color:#5b4300;padding:8px 12px;border-bottom:1px solid #f0d98b;align-items:center;justify-content:space-between;gap:10px;font-size:12px;position:absolute;top:72px;left:0;right:0;z-index:19}
     .chat-save-bar.active{display:flex}
     .chat-save-bar button{padding:8px 10px;font-size:12px;border-radius:10px;background:#075E54;color:white;white-space:nowrap}
@@ -323,7 +335,7 @@
       </div>
 
       <div class="notice">
-        Versão 3.9.4: perfil mais limpo, sem mensagens técnicas, mantendo limpeza automática de 7 dias.
+        Versão 4.0: ligação de áudio em teste, perfil limpo e limpeza automática de 7 dias.
       </div>
     </div>
   </div>
@@ -355,6 +367,7 @@
         <h3 id="chatContactName">Contato</h3>
         <p id="chatContactPhone">telefone</p>
       </div>
+      <button class="chat-call-btn" onclick="startAudioCall()" title="Ligação de áudio">📞 <span>Ligar</span></button>
       <button class="chat-clear-btn" onclick="clearActiveConversationUnfavorited()" title="Limpar conversa">🧹 <span>Limpar</span></button>
     </div>
 
@@ -399,6 +412,16 @@
       <button id="micButton" class="mic-btn" onclick="startAudioRecording()">🎤</button>
       <input id="messageInput" type="text" placeholder="Digite uma mensagem..." oninput="handleTypingInput()" onkeydown="handleMessageKey(event)" />
       <button id="sendButton" class="send-btn" onclick="sendMessage()">➤</button>
+    </div>
+  </div>
+
+  <div id="callOverlay" class="call-overlay">
+    <div class="call-box">
+      <div id="callAvatar" class="call-avatar">Z</div>
+      <h2 id="callTitle">Ligação de áudio</h2>
+      <p id="callSubtitle">Preparando chamada...</p>
+      <audio id="remoteCallAudio" autoplay playsinline></audio>
+      <div id="callActions" class="call-actions"></div>
     </div>
   </div>
 
@@ -473,6 +496,14 @@
   let currentStatusOwnerId = "";
   let statusViewerTimer = null;
   let cleanupRunning = false;
+  let activeCallUnsubscribe = null;
+  let currentCallId = "";
+  let currentCallRole = "";
+  let currentCallData = null;
+  let currentPeerConnection = null;
+  let localCallStream = null;
+  let addedRemoteCandidates = {};
+  let remoteDescriptionApplied = false;
 
   let mediaRecorder = null;
   let audioChunks = [];
@@ -532,7 +563,7 @@
     if (!("serviceWorker" in navigator)) return null;
 
     try {
-      const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js?v=194", { scope: "/" });
+      const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js?v=195", { scope: "/" });
       await navigator.serviceWorker.ready;
       if (registration && registration.update) registration.update();
       return registration;
@@ -807,7 +838,7 @@
         storyStatuses: nextStatuses,
         lastStoryAt: item.createdAt,
         updatedAt: Date.now(),
-        appVersion: "3.9.4"
+        appVersion: "4.0"
       }, { merge: true });
 
       currentUser.storyStatuses = nextStatuses;
@@ -1130,7 +1161,7 @@
           storyStatuses: fresh,
           lastStoryAt: fresh[0]?.createdAt || 0,
           updatedAt: Date.now(),
-          appVersion: "3.9.4"
+          appVersion: "4.0"
         }, { merge: true });
 
         currentUser.storyStatuses = fresh;
@@ -1197,7 +1228,7 @@
       lastActiveAt: now,
       presenceUpdatedAt: now,
       updatedAt: now,
-      appVersion: "3.9.4"
+      appVersion: "4.0"
     };
 
     if (!isOnline) payload.lastSeen = now;
@@ -1307,7 +1338,7 @@
       lastSeen: null,
       lastActiveAt: Date.now(),
       presenceUpdatedAt: Date.now(),
-      appVersion: "3.9.4",
+      appVersion: "4.0",
       createdAt: Date.now(),
       updatedAt: Date.now()
     };
@@ -1347,7 +1378,7 @@
           lastActiveAt: Date.now(),
           presenceUpdatedAt: Date.now(),
           updatedAt: Date.now(),
-          appVersion: "3.9.4"
+          appVersion: "4.0"
         }, { merge: true });
 
         localStorage.setItem("zappi_current_user", JSON.stringify(currentUser));
@@ -2050,7 +2081,7 @@
         await db.collection("users").doc(currentUser.id).set({
           statusText,
           updatedAt: Date.now(),
-          appVersion: "3.9.4"
+          appVersion: "4.0"
         }, { merge: true });
 
         await updateMyStatusInConversations(statusText);
@@ -2194,6 +2225,321 @@
     }
   }
 
+  function getActiveConversationMeta() {
+    if (!activeChat || !currentUser) return null;
+    const otherId = activeChat.contactUserId || (activeChat.phone ? "user_" + activeChat.phone : "");
+    if (!otherId) return null;
+    return {
+      otherId,
+      conversationId: getConversationId(currentUser.id, otherId)
+    };
+  }
+
+  function stopActiveCallListener() {
+    if (activeCallUnsubscribe) {
+      activeCallUnsubscribe();
+      activeCallUnsubscribe = null;
+    }
+  }
+
+  function callContactName() {
+    return activeChat?.name || activeChat?.savedName || activeChatPresence?.name || "Contato";
+  }
+
+  function callContactPhoto() {
+    return activeChatPresence?.photoData || activeChatPresence?.photoUrl || activeChat?.photoData || activeChat?.photoUrl || "";
+  }
+
+  function setCallOverlay({ mode, title, subtitle, showAccept = false, showDecline = false, showEnd = true }) {
+    const overlay = document.getElementById("callOverlay");
+    const avatar = document.getElementById("callAvatar");
+    const titleEl = document.getElementById("callTitle");
+    const subEl = document.getElementById("callSubtitle");
+    const actions = document.getElementById("callActions");
+    if (!overlay || !avatar || !titleEl || !subEl || !actions) return;
+
+    const name = callContactName();
+    const photo = callContactPhoto();
+    avatar.innerHTML = avatarInnerHtml(name, photo);
+    titleEl.innerText = title || "Ligação de áudio";
+    subEl.innerText = subtitle || "";
+
+    const buttons = [];
+    if (showAccept) buttons.push(`<button class="btn-call-accept" onclick="acceptIncomingAudioCall()">Atender</button>`);
+    if (showDecline) buttons.push(`<button class="btn-call-end" onclick="declineIncomingAudioCall()">Recusar</button>`);
+    if (showEnd) buttons.push(`<button class="btn-call-end" onclick="endCurrentAudioCall()">Encerrar</button>`);
+    actions.innerHTML = buttons.join("");
+    overlay.classList.add("active");
+  }
+
+  function hideCallOverlay() {
+    const overlay = document.getElementById("callOverlay");
+    if (overlay) overlay.classList.remove("active");
+  }
+
+  async function ensureLocalCallStream() {
+    if (localCallStream) return localCallStream;
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      throw new Error("Este navegador não permite ligação de áudio.");
+    }
+    localCallStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    return localCallStream;
+  }
+
+  function createAudioPeerConnection(role) {
+    const meta = getActiveConversationMeta();
+    if (!meta) throw new Error("Conversa não encontrada.");
+
+    const pc = new RTCPeerConnection({
+      iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
+    });
+
+    pc.ontrack = event => {
+      const audio = document.getElementById("remoteCallAudio");
+      if (audio && event.streams && event.streams[0]) {
+        audio.srcObject = event.streams[0];
+        audio.play().catch(() => {});
+      }
+    };
+
+    pc.onconnectionstatechange = () => {
+      if (["failed", "closed", "disconnected"].includes(pc.connectionState)) {
+        const sub = document.getElementById("callSubtitle");
+        if (sub && currentCallId) sub.innerText = "Conexão encerrada ou instável.";
+      }
+    };
+
+    pc.onicecandidate = async event => {
+      if (!event.candidate || !currentCallId) return;
+      try {
+        const field = role === "caller" ? "activeCall.callerCandidates" : "activeCall.receiverCandidates";
+        const data = {};
+        data[field] = firebase.firestore.FieldValue.arrayUnion(event.candidate.toJSON());
+        data["activeCall.updatedAt"] = Date.now();
+        await db.collection("conversations").doc(meta.conversationId).set(data, { merge: true });
+      } catch (error) {
+        console.error("Erro ao enviar candidato da chamada:", error);
+      }
+    };
+
+    currentPeerConnection = pc;
+    return pc;
+  }
+
+  async function addLocalTracksToPeer(pc) {
+    const stream = await ensureLocalCallStream();
+    stream.getTracks().forEach(track => pc.addTrack(track, stream));
+  }
+
+  async function startAudioCall() {
+    if (!activeChat) return alert("Abra uma conversa primeiro.");
+    if (!firebaseReady || !db) return alert("A ligação precisa do Firebase conectado.");
+    if (currentCallId) return alert("Você já está em uma chamada.");
+
+    const meta = getActiveConversationMeta();
+    if (!meta) return alert("Não foi possível iniciar a ligação.");
+
+    try {
+      currentCallRole = "caller";
+      currentCallId = "call_" + Date.now();
+      addedRemoteCandidates = {};
+      remoteDescriptionApplied = false;
+
+      setCallOverlay({
+        title: "Chamando " + callContactName(),
+        subtitle: "Aguardando a pessoa atender...",
+        showEnd: true
+      });
+
+      const pc = createAudioPeerConnection("caller");
+      await addLocalTracksToPeer(pc);
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+
+      const callData = {
+        id: currentCallId,
+        type: "audio",
+        status: "ringing",
+        callerId: currentUser.id,
+        callerName: currentUser.name || "Contato",
+        receiverId: meta.otherId,
+        receiverName: callContactName(),
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        offer: offer.toJSON ? offer.toJSON() : { type: offer.type, sdp: offer.sdp },
+        answer: null,
+        callerCandidates: [],
+        receiverCandidates: []
+      };
+
+      await db.collection("conversations").doc(meta.conversationId).set({ activeCall: callData }, { merge: true });
+    } catch (error) {
+      console.error("Erro ao iniciar ligação:", error);
+      alert(error.message || "Não foi possível iniciar a ligação.");
+      await cleanupAudioCall(false);
+    }
+  }
+
+  function listenActiveAudioCall() {
+    stopActiveCallListener();
+    if (!firebaseReady || !db || !activeChat || !currentUser) return;
+
+    const meta = getActiveConversationMeta();
+    if (!meta) return;
+
+    activeCallUnsubscribe = db.collection("conversations").doc(meta.conversationId).onSnapshot(async doc => {
+      const data = doc.exists ? doc.data() || {} : {};
+      const call = data.activeCall || null;
+      if (!call || !call.id) return;
+
+      const involved = call.callerId === currentUser.id || call.receiverId === currentUser.id;
+      if (!involved) return;
+
+      currentCallData = call;
+
+      if ((call.status === "ended" || call.status === "declined") && currentCallId === call.id) {
+        const wasDeclined = call.status === "declined";
+        await cleanupAudioCall(false);
+        if (wasDeclined) alert("Ligação recusada ou encerrada.");
+        return;
+      }
+
+      if (call.status === "ringing" && call.receiverId === currentUser.id && !currentCallId) {
+        currentCallId = call.id;
+        currentCallRole = "receiver";
+        addedRemoteCandidates = {};
+        remoteDescriptionApplied = false;
+        setCallOverlay({
+          title: "Ligação de " + (call.callerName || callContactName()),
+          subtitle: "Chamada de áudio recebida",
+          showAccept: true,
+          showDecline: true,
+          showEnd: false
+        });
+        playMessageSound();
+        return;
+      }
+
+      if (call.status === "accepted" && currentCallId === call.id) {
+        setCallOverlay({
+          title: "Em ligação com " + callContactName(),
+          subtitle: "Ligação de áudio ativa",
+          showEnd: true
+        });
+        await applyRemoteCallData(call);
+      }
+
+      if (call.status === "ringing" && currentCallId === call.id && currentCallRole === "caller") {
+        setCallOverlay({
+          title: "Chamando " + callContactName(),
+          subtitle: "Aguardando a pessoa atender...",
+          showEnd: true
+        });
+      }
+    }, error => console.error("Erro ouvindo ligação:", error));
+  }
+
+  async function acceptIncomingAudioCall() {
+    if (!currentCallData || !currentCallId || currentCallRole !== "receiver") return;
+    const meta = getActiveConversationMeta();
+    if (!meta) return;
+
+    try {
+      setCallOverlay({ title: "Atendendo...", subtitle: "Conectando áudio...", showEnd: true });
+      const pc = createAudioPeerConnection("receiver");
+      await addLocalTracksToPeer(pc);
+      await pc.setRemoteDescription(new RTCSessionDescription(currentCallData.offer));
+      remoteDescriptionApplied = true;
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      await db.collection("conversations").doc(meta.conversationId).set({
+        "activeCall.status": "accepted",
+        "activeCall.answer": answer.toJSON ? answer.toJSON() : { type: answer.type, sdp: answer.sdp },
+        "activeCall.acceptedAt": Date.now(),
+        "activeCall.updatedAt": Date.now()
+      }, { merge: true });
+      await applyRemoteCallData(currentCallData);
+    } catch (error) {
+      console.error("Erro ao atender ligação:", error);
+      alert(error.message || "Não foi possível atender a ligação.");
+      await endCurrentAudioCall();
+    }
+  }
+
+  async function declineIncomingAudioCall() {
+    const meta = getActiveConversationMeta();
+    if (meta && currentCallId) {
+      await db.collection("conversations").doc(meta.conversationId).set({
+        "activeCall.status": "declined",
+        "activeCall.endedAt": Date.now(),
+        "activeCall.updatedAt": Date.now()
+      }, { merge: true });
+    }
+    await cleanupAudioCall(false);
+  }
+
+  async function endCurrentAudioCall() {
+    const meta = getActiveConversationMeta();
+    if (meta && currentCallId && firebaseReady && db) {
+      try {
+        await db.collection("conversations").doc(meta.conversationId).set({
+          "activeCall.status": "ended",
+          "activeCall.endedBy": currentUser.id,
+          "activeCall.endedAt": Date.now(),
+          "activeCall.updatedAt": Date.now()
+        }, { merge: true });
+      } catch (error) {
+        console.error("Erro ao encerrar ligação:", error);
+      }
+    }
+    await cleanupAudioCall(false);
+  }
+
+  async function applyRemoteCallData(call) {
+    if (!currentPeerConnection || !call) return;
+
+    try {
+      if (currentCallRole === "caller" && call.answer && !remoteDescriptionApplied) {
+        await currentPeerConnection.setRemoteDescription(new RTCSessionDescription(call.answer));
+        remoteDescriptionApplied = true;
+      }
+
+      const candidates = currentCallRole === "caller" ? (call.receiverCandidates || []) : (call.callerCandidates || []);
+      for (const candidate of candidates) {
+        const key = JSON.stringify(candidate);
+        if (addedRemoteCandidates[key]) continue;
+        addedRemoteCandidates[key] = true;
+        await currentPeerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+      }
+    } catch (error) {
+      console.error("Erro ao aplicar dados remotos da chamada:", error);
+    }
+  }
+
+  async function cleanupAudioCall(closeListener = false) {
+    if (closeListener) stopActiveCallListener();
+
+    if (currentPeerConnection) {
+      try { currentPeerConnection.close(); } catch {}
+      currentPeerConnection = null;
+    }
+
+    if (localCallStream) {
+      localCallStream.getTracks().forEach(track => track.stop());
+      localCallStream = null;
+    }
+
+    const audio = document.getElementById("remoteCallAudio");
+    if (audio) audio.srcObject = null;
+
+    currentCallId = "";
+    currentCallRole = "";
+    currentCallData = null;
+    addedRemoteCandidates = {};
+    remoteDescriptionApplied = false;
+    hideCallOverlay();
+  }
+
   async function openChat(contact) {
     activeChat = contact;
     lastActiveMessageId = "";
@@ -2227,6 +2573,7 @@
     markConversationAsRead();
     listenActiveChatPresence();
     listenTypingStatus();
+    listenActiveAudioCall();
     listenMessages();
 
     setTimeout(() => {
@@ -2241,6 +2588,7 @@
     await setTypingStatus(false);
     stopTypingListener();
     stopActiveChatPresenceListener();
+    await cleanupAudioCall(true);
     cancelReply();
     cancelEdit();
     closeContactInfo();
@@ -3971,6 +4319,7 @@
     if (!confirm("Deseja sair deste perfil?")) return;
 
     await setTypingStatus(false);
+    await cleanupAudioCall(true);
     await setMyPresence(false);
 
     localStorage.removeItem("zappi_current_user");
@@ -4025,7 +4374,7 @@
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", async () => {
       try {
-        await navigator.serviceWorker.register("sw.js?v=194");
+        await navigator.serviceWorker.register("sw.js?v=195");
       } catch (error) {
         console.error(error);
       }
