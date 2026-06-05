@@ -53,7 +53,7 @@
     .search-box input{border-radius:999px;background:#f4f7f5;border:1px solid #dce8e5;padding:13px 16px;font-size:15px}
 
     .profile-box{display:flex;gap:14px;align-items:center;background:white;padding:16px;border-radius:18px;box-shadow:0 6px 18px rgba(0,0,0,.07);margin-bottom:14px}
-    .avatar{width:52px;height:52px;border-radius:50%;background:#128C7E;color:white;display:flex;justify-content:center;align-items:center;font-weight:900;font-size:20px;flex-shrink:0;overflow:hidden}
+    .avatar{width:52px;height:52px;border-radius:50%;background:#128C7E;color:white;display:flex;justify-content:center;align-items:center;font-weight:900;font-size:20px;flex-shrink:0;overflow:hidden;position:relative}
     .avatar.small{width:42px;height:42px;font-size:16px}
     .avatar.big{width:78px;height:78px;font-size:28px}
     .avatar img{width:100%;height:100%;object-fit:cover;display:block}
@@ -89,6 +89,9 @@
     .chat-name h3{font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     .chat-name p{font-size:11px;opacity:.8;transition:.2s}
     .chat-name p.typing{color:#b8fff4;opacity:1;font-weight:800}
+    .chat-name p.online{color:#b8fff4;opacity:1;font-weight:800}
+    .presence-dot{position:absolute;right:1px;bottom:1px;width:13px;height:13px;border-radius:50%;background:#25D366;border:2px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.08)}
+    .avatar.small .presence-dot{width:11px;height:11px;right:0;bottom:0}
 
     .chat-save-bar{display:none;height:44px;background:#fff8df;color:#5b4300;padding:8px 12px;border-bottom:1px solid #f0d98b;align-items:center;justify-content:space-between;gap:10px;font-size:12px;position:absolute;top:72px;left:0;right:0;z-index:19}
     .chat-save-bar.active{display:flex}
@@ -248,7 +251,7 @@
       </div>
 
       <div class="notice">
-        Versão 3.3: copiar mensagem, favoritar mensagem, pesquisa e visual melhorado nas conversas.
+        Versão 3.4: online, visto por último, digitando mais firme e presença automática.
       </div>
     </div>
   </div>
@@ -347,8 +350,13 @@
   let activeMessagesUnsubscribe = null;
   let conversationsUnsubscribe = null;
   let typingUnsubscribe = null;
+  let activeChatPresenceUnsubscribe = null;
   let typingTimeout = null;
   let typingRevertTimeout = null;
+  let presenceHeartbeatTimer = null;
+  let presenceListenersBound = false;
+  let activeChatTyping = false;
+  let activeChatPresence = null;
   let deferredInstallPrompt = null;
   let lastActiveMessageId = "";
   let knownConversationUpdates = {};
@@ -429,7 +437,7 @@
     if (!("serviceWorker" in navigator)) return null;
 
     try {
-      const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js?v=180", { scope: "/" });
+      const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js?v=181", { scope: "/" });
       await navigator.serviceWorker.ready;
       if (registration && registration.update) registration.update();
       return registration;
@@ -509,6 +517,141 @@
     localStorage.setItem(localKey, JSON.stringify(data));
   }
 
+  function isPresenceOnline(userData) {
+    if (!userData) return false;
+    const lastActive = userData.lastActiveAt || userData.presenceUpdatedAt || 0;
+    return userData.online === true && Date.now() - lastActive < 120000;
+  }
+
+  function formatLastSeen(lastSeen) {
+    if (!lastSeen) return "offline";
+
+    const date = new Date(lastSeen);
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const yesterday = today - 86400000;
+    const day = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+    const time = date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+
+    if (day === today) return "visto por último hoje às " + time;
+    if (day === yesterday) return "visto por último ontem às " + time;
+
+    return "visto por último em " + date.toLocaleDateString("pt-BR") + " às " + time;
+  }
+
+  function getChatStatusText() {
+    if (!activeChat) return "";
+    if (activeChatTyping) return "digitando...";
+    if (isPresenceOnline(activeChatPresence)) return "online";
+    if (activeChatPresence && activeChatPresence.lastSeen) return formatLastSeen(activeChatPresence.lastSeen);
+    return activeChat.phone || "";
+  }
+
+  function updateChatTopStatus() {
+    const phoneLine = document.getElementById("chatContactPhone");
+    if (!phoneLine || !activeChat) return;
+
+    const text = getChatStatusText();
+    phoneLine.innerText = text;
+    phoneLine.classList.toggle("typing", activeChatTyping);
+    phoneLine.classList.toggle("online", !activeChatTyping && isPresenceOnline(activeChatPresence));
+  }
+
+  async function setMyPresence(isOnline) {
+    if (!firebaseReady || !db || !currentUser) return;
+
+    const now = Date.now();
+    const payload = {
+      online: !!isOnline,
+      lastActiveAt: now,
+      presenceUpdatedAt: now,
+      updatedAt: now,
+      appVersion: "3.4"
+    };
+
+    if (!isOnline) payload.lastSeen = now;
+
+    try {
+      await db.collection("users").doc(currentUser.id).set(payload, { merge: true });
+    } catch (error) {
+      console.error("Erro ao atualizar presença:", error);
+    }
+  }
+
+  function startPresenceTracking() {
+    if (!firebaseReady || !db || !currentUser) return;
+
+    setMyPresence(true);
+
+    if (presenceHeartbeatTimer) clearInterval(presenceHeartbeatTimer);
+    presenceHeartbeatTimer = setInterval(() => {
+      if (!document.hidden && navigator.onLine !== false) setMyPresence(true);
+    }, 25000);
+
+    if (presenceListenersBound) return;
+    presenceListenersBound = true;
+
+    document.addEventListener("visibilitychange", () => {
+      if (!currentUser) return;
+      if (document.hidden) {
+        setTypingStatus(false);
+        setMyPresence(false);
+      } else {
+        setMyPresence(true);
+      }
+    });
+
+    window.addEventListener("pagehide", () => {
+      setTypingStatus(false);
+      setMyPresence(false);
+    });
+
+    window.addEventListener("focus", () => setMyPresence(true));
+    window.addEventListener("blur", () => {
+      setTypingStatus(false);
+      setMyPresence(false);
+    });
+  }
+
+  function stopActiveChatPresenceListener() {
+    if (activeChatPresenceUnsubscribe) {
+      activeChatPresenceUnsubscribe();
+      activeChatPresenceUnsubscribe = null;
+    }
+
+    activeChatPresence = null;
+    activeChatTyping = false;
+  }
+
+  function listenActiveChatPresence() {
+    if (!firebaseReady || !db || !currentUser || !activeChat) return;
+
+    stopActiveChatPresenceListener();
+
+    const otherId = activeChat.contactUserId || ("user_" + activeChat.phone);
+
+    activeChatPresenceUnsubscribe = db.collection("users")
+      .doc(otherId)
+      .onSnapshot(doc => {
+        if (!activeChat) return;
+
+        if (doc.exists) {
+          activeChatPresence = doc.data() || null;
+
+          const name = activeChat.name || activeChat.savedName || activeChatPresence?.name || "Contato";
+          const photo = activeChatPresence?.photoData || activeChatPresence?.photoUrl || activeChat.photoData || activeChat.photoUrl || "";
+          const avatar = document.getElementById("chatAvatar");
+          if (avatar) avatar.innerHTML = avatarInnerHtml(name, photo) + (isPresenceOnline(activeChatPresence) ? '<span class="presence-dot"></span>' : '');
+        } else {
+          activeChatPresence = null;
+        }
+
+        updateChatTopStatus();
+      }, error => {
+        console.error("Erro ouvindo presença:", error);
+      });
+  }
+
   async function createProfile() {
     const name = document.getElementById("regName").value.trim();
     const phone = cleanPhone(document.getElementById("regPhone").value);
@@ -524,6 +667,11 @@
       email,
       photoUrl: "",
       photoData: "",
+      online: true,
+      lastSeen: null,
+      lastActiveAt: Date.now(),
+      presenceUpdatedAt: Date.now(),
+      appVersion: "3.4",
       createdAt: Date.now(),
       updatedAt: Date.now()
     };
@@ -557,7 +705,11 @@
 
         await db.collection("users").doc(currentUser.id).set({
           ...currentUser,
-          updatedAt: Date.now()
+          online: true,
+          lastActiveAt: Date.now(),
+          presenceUpdatedAt: Date.now(),
+          updatedAt: Date.now(),
+          appVersion: "3.4"
         }, { merge: true });
 
         localStorage.setItem("zappi_current_user", JSON.stringify(currentUser));
@@ -583,6 +735,7 @@
     document.getElementById("chatScreen").classList.remove("active");
     document.getElementById("homeScreen").classList.add("active");
     document.getElementById("topUserName").innerText = currentUser.name;
+    startPresenceTracking();
     openTab("chats");
 
     setTimeout(() => handleDeepLinkOpenChat(), 900);
@@ -773,7 +926,7 @@
 
     return `
       <div class="contact-item" onclick="openChatFromEncoded('${safeJson(c)}')">
-        ${avatarHtml(c.name || "Contato", photo)}
+        ${avatarHtml(c.name || "Contato", photo).replace('</div>', c.online ? '<span class="presence-dot"></span></div>' : '</div>')}
         <div class="contact-main">
           <h4>${escapeHtml(c.name || "Contato")}</h4>
           <p class="${unread ? "unread-text" : ""}">
@@ -1047,6 +1200,7 @@
             lastMessage: conv.lastMessage || "Toque para conversar",
             timeText: formatTime(conv.updatedAt),
             hasFavorite: conv.hasFavorite === true,
+            online: isPresenceOnline(otherUser),
             unread:
               conv.lastSenderId &&
               conv.lastSenderId !== currentUser.id &&
@@ -1235,6 +1389,7 @@
 
     stopConversationListener();
     stopTypingListener();
+    stopActiveChatPresenceListener();
     hideToast();
     await loadContacts();
 
@@ -1245,12 +1400,16 @@
     const photo = contact.photoData || contact.photoUrl || "";
 
     document.getElementById("chatContactName").innerText = name;
+    activeChatPresence = null;
+    activeChatTyping = false;
     document.getElementById("chatContactPhone").innerText = contact.phone || "";
-    document.getElementById("chatContactPhone").classList.remove("typing");
+    document.getElementById("chatContactPhone").classList.remove("typing", "online");
     document.getElementById("chatAvatar").innerHTML = avatarInnerHtml(name, photo);
 
+    setMyPresence(true);
     updateSaveContactBar();
     markConversationAsRead();
+    listenActiveChatPresence();
     listenTypingStatus();
     listenMessages();
 
@@ -1265,6 +1424,7 @@
 
     await setTypingStatus(false);
     stopTypingListener();
+    stopActiveChatPresenceListener();
     cancelReply();
     cancelEdit();
 
@@ -1324,37 +1484,31 @@
 
     const otherId = activeChat.contactUserId || ("user_" + activeChat.phone);
     const conversationId = getConversationId(currentUser.id, otherId);
-    const phoneLine = document.getElementById("chatContactPhone");
 
     typingUnsubscribe = db.collection("conversations")
       .doc(conversationId)
       .collection("typing")
       .doc(otherId)
       .onSnapshot(doc => {
-        if (!activeChat || !phoneLine) return;
+        if (!activeChat) return;
 
         clearTimeout(typingRevertTimeout);
+        activeChatTyping = false;
 
         if (doc.exists) {
           const data = doc.data() || {};
-          const fresh = Date.now() - (data.at || 0) < 5000;
+          const fresh = Date.now() - (data.at || 0) < 4500;
 
           if (data.typing && fresh) {
-            phoneLine.innerText = "digitando...";
-            phoneLine.classList.add("typing");
-
+            activeChatTyping = true;
             typingRevertTimeout = setTimeout(() => {
-              if (!activeChat || !phoneLine) return;
-              phoneLine.innerText = activeChat.phone || "";
-              phoneLine.classList.remove("typing");
+              activeChatTyping = false;
+              updateChatTopStatus();
             }, 3500);
-
-            return;
           }
         }
 
-        phoneLine.innerText = activeChat.phone || "";
-        phoneLine.classList.remove("typing");
+        updateChatTopStatus();
       }, error => {
         console.error("Erro ouvindo digitando:", error);
       });
@@ -2772,8 +2926,11 @@
     }
   }
 
-  function logout() {
+  async function logout() {
     if (!confirm("Deseja sair deste perfil?")) return;
+
+    await setTypingStatus(false);
+    await setMyPresence(false);
 
     localStorage.removeItem("zappi_current_user");
 
@@ -2827,7 +2984,7 @@
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", async () => {
       try {
-        await navigator.serviceWorker.register("sw.js?v=180");
+        await navigator.serviceWorker.register("sw.js?v=181");
       } catch (error) {
         console.error(error);
       }
@@ -2839,11 +2996,14 @@
   window.addEventListener("online", () => {
     const el = document.getElementById("networkStatus");
     if (el) el.innerText = "Online";
+    setMyPresence(true);
   });
 
   window.addEventListener("offline", () => {
     const el = document.getElementById("networkStatus");
     if (el) el.innerText = "Offline";
+    setTypingStatus(false);
+    setMyPresence(false);
   });
 
   document.addEventListener("focusin", () => {
@@ -2862,6 +3022,7 @@
 
   window.addEventListener("beforeunload", () => {
     setTypingStatus(false);
+    setMyPresence(false);
   });
 
   (async function start() {
