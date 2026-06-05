@@ -12,20 +12,32 @@ firebase.initializeApp({
 
 const messaging = firebase.messaging();
 
+const APP_ORIGIN = "https://zappi-web.vercel.app";
+
+self.addEventListener("install", (event) => {
+  self.skipWaiting();
+});
+
+self.addEventListener("activate", (event) => {
+  event.waitUntil(self.clients.claim());
+});
+
 function getFullUrl(rawUrl) {
   if (!rawUrl) {
-    return self.location.origin + "/";
+    return APP_ORIGIN + "/";
   }
 
-  if (String(rawUrl).startsWith("http://") || String(rawUrl).startsWith("https://")) {
-    return String(rawUrl);
+  const value = String(rawUrl);
+
+  if (value.startsWith("http://") || value.startsWith("https://")) {
+    return value;
   }
 
-  if (String(rawUrl).startsWith("/")) {
-    return self.location.origin + String(rawUrl);
+  if (value.startsWith("/")) {
+    return APP_ORIGIN + value;
   }
 
-  return self.location.origin + "/" + String(rawUrl);
+  return APP_ORIGIN + "/" + value;
 }
 
 messaging.onBackgroundMessage((payload) => {
@@ -50,17 +62,19 @@ messaging.onBackgroundMessage((payload) => {
     body,
     icon: "/icon-192.png",
     badge: "/icon-192.png",
+    image: "/icon-192.png",
     tag: "zappi-message-" + Date.now(),
     renotify: true,
-    requireInteraction: false,
+    requireInteraction: true,
     silent: false,
-    vibrate: [250, 120, 250, 120, 250],
+    vibrate: [300, 120, 300, 120, 300],
     data: {
-      url
+      url,
+      click_action: url
     },
     actions: [
       {
-        action: "open",
+        action: "open_chat",
         title: "Abrir conversa"
       }
     ]
@@ -72,41 +86,42 @@ messaging.onBackgroundMessage((payload) => {
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
 
-  const urlToOpen = getFullUrl(event.notification?.data?.url || "/");
+  const urlToOpen = getFullUrl(
+    event.notification?.data?.url ||
+    event.notification?.data?.click_action ||
+    "/"
+  );
 
   event.waitUntil(
-    clients.matchAll({
-      type: "window",
-      includeUncontrolled: true
-    }).then(async (clientList) => {
-      for (const client of clientList) {
-        const clientUrl = new URL(client.url);
+    (async () => {
+      const windowClients = await clients.matchAll({
+        type: "window",
+        includeUncontrolled: true
+      });
 
-        if (clientUrl.origin === self.location.origin) {
-          if ("navigate" in client) {
-            const navigatedClient = await client.navigate(urlToOpen);
+      for (const client of windowClients) {
+        try {
+          const clientUrl = new URL(client.url);
 
-            if (navigatedClient && "focus" in navigatedClient) {
-              return navigatedClient.focus();
+          if (clientUrl.origin === APP_ORIGIN) {
+            if ("navigate" in client) {
+              await client.navigate(urlToOpen);
             }
-          }
 
-          if ("focus" in client) {
-            client.postMessage({
-              type: "OPEN_CHAT_FROM_NOTIFICATION",
-              url: urlToOpen
-            });
+            if ("focus" in client) {
+              await client.focus();
+            }
 
-            return client.focus();
+            return;
           }
+        } catch (error) {
+          console.error("Erro ao focar janela existente:", error);
         }
       }
 
       if (clients.openWindow) {
-        return clients.openWindow(urlToOpen);
+        await clients.openWindow(urlToOpen);
       }
-
-      return null;
-    })
+    })()
   );
 });
