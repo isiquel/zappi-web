@@ -246,6 +246,14 @@
     .status-entry-time{font-size:11px;color:#777}
     .status-entry img{width:100%;max-height:360px;object-fit:cover;border-radius:16px;background:#ddd}
     .status-entry-text{font-size:14px;color:#333;line-height:1.45;word-break:break-word}
+    .status-entry-actions{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+    .status-entry-actions button{height:34px;border-radius:999px;padding:0 12px;background:#eaf3f1;color:#075E54;font-size:12px;font-weight:900}
+    .status-entry-actions button.liked{background:#ffe9ef;color:#c2185b}
+    .status-entry-meta{font-size:12px;color:#666;font-weight:800}
+    .status-viewers-box{background:#f7fbfa;border:1px solid #e1efec;border-radius:16px;padding:10px;display:flex;flex-direction:column;gap:7px}
+    .status-viewers-box h4{font-size:13px;color:#075E54}
+    .status-viewer-row{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:12px;color:#555;border-top:1px solid #e5efec;padding-top:7px}
+    .status-viewer-row:first-of-type{border-top:0;padding-top:0}
     .status-empty{background:#fff;border-radius:18px;padding:22px;text-align:center;color:#666;box-shadow:0 6px 18px rgba(0,0,0,.07)}
 
     .in-app-toast{position:absolute;top:14px;left:14px;right:14px;z-index:9999;background:#075E54;color:white;padding:13px 14px;border-radius:16px;box-shadow:0 10px 25px rgba(0,0,0,.25);display:none;align-items:center;gap:10px;cursor:pointer;animation:slideDown .25s ease-out}
@@ -441,6 +449,7 @@
       <div id="callMediaControls" class="call-media-controls">
         <button id="callMuteBtn" onclick="toggleCallMicrophone()">🎙️ Microfone</button>
         <button id="callCameraBtn" onclick="toggleCallCamera()">📷 Câmera</button>
+        <button id="callFlipCameraBtn" onclick="flipCallCamera()">🔄 Virar</button>
       </div>
       <div id="callAudioControls" class="call-audio-controls">
         <button id="callOutputBtn" onclick="toggleCallAudioOutput()">🔈 Baixo</button>
@@ -535,6 +544,7 @@
   let callAudioMode = localStorage.getItem("zappi_call_audio_mode") || "low";
   let callAudioVolume = Number(localStorage.getItem("zappi_call_audio_volume") || "0.25");
   if (!Number.isFinite(callAudioVolume) || callAudioVolume <= 0) callAudioVolume = 0.25;
+  let callVideoFacingMode = "user";
 
   let mediaRecorder = null;
   let audioChunks = [];
@@ -869,7 +879,7 @@
         storyStatuses: nextStatuses,
         lastStoryAt: item.createdAt,
         updatedAt: Date.now(),
-        appVersion: "4.0"
+        appVersion: "4.1.1"
       }, { merge: true });
 
       currentUser.storyStatuses = nextStatuses;
@@ -980,7 +990,90 @@
     statusViewerTimer = null;
   }
 
-  function openStatusViewer(ownerId) {
+
+  function statusArrayCount(arr) {
+    return Array.isArray(arr) ? arr.length : 0;
+  }
+
+  function hasCurrentUserInStatusArray(arr) {
+    return Array.isArray(arr) && arr.some(item => item && item.id === currentUser?.id);
+  }
+
+  function statusViewsText(item) {
+    const views = statusArrayCount(item.viewedBy);
+    const likes = statusArrayCount(item.likedBy);
+    const viewLabel = views === 1 ? "1 visualização" : views + " visualizações";
+    const likeLabel = likes === 1 ? "1 curtida" : likes + " curtidas";
+    return viewLabel + " · " + likeLabel;
+  }
+
+  function statusViewersHtml(item) {
+    const viewers = Array.isArray(item.viewedBy) ? item.viewedBy : [];
+    const likedBy = Array.isArray(item.likedBy) ? item.likedBy : [];
+    if (item.ownerId !== currentUser?.id) return "";
+    if (!viewers.length && !likedBy.length) {
+      return `<div class="status-viewers-box"><h4>Visualizações</h4><div class="status-entry-meta">Ninguém visualizou ainda.</div></div>`;
+    }
+    const likedMap = {};
+    likedBy.forEach(v => { if (v && v.id) likedMap[v.id] = true; });
+    const merged = [...viewers];
+    likedBy.forEach(v => {
+      if (v && v.id && !merged.some(x => x && x.id === v.id)) merged.push(v);
+    });
+    return `<div class="status-viewers-box">
+      <h4>Visualizações e curtidas</h4>
+      ${merged.map(v => `<div class="status-viewer-row"><span>${escapeHtml(v.name || v.phone || "Contato")}</span><span>${likedMap[v.id] ? "❤️ Curtiu" : "👁️ Viu"}</span></div>`).join("")}
+    </div>`;
+  }
+
+  async function updateStatusInteraction(ownerId, statusId, action) {
+    if (!currentUser || !firebaseReady || !db || !ownerId || !statusId) return;
+    try {
+      const ownerRef = db.collection("users").doc(ownerId);
+      const ownerDoc = await ownerRef.get();
+      if (!ownerDoc.exists) return;
+      const ownerData = ownerDoc.data() || {};
+      const cutoff = statusCutoffTime();
+      const viewer = {
+        id: currentUser.id,
+        name: currentUser.name || "Contato",
+        phone: currentUser.phone || "",
+        at: Date.now()
+      };
+      const nextStatuses = (Array.isArray(ownerData.storyStatuses) ? ownerData.storyStatuses : [])
+        .filter(s => (s.createdAt || 0) >= cutoff)
+        .map(s => {
+          if (!s || s.id !== statusId) return s;
+          const viewedBy = Array.isArray(s.viewedBy) ? s.viewedBy.filter(v => v && v.id !== currentUser.id) : [];
+          const likedBy = Array.isArray(s.likedBy) ? s.likedBy.filter(v => v && v.id !== currentUser.id) : [];
+          viewedBy.push(viewer);
+          if (action === "like") likedBy.push(viewer);
+          return { ...s, viewedBy, likedBy, updatedAt: Date.now() };
+        });
+      await ownerRef.set({ storyStatuses: nextStatuses, updatedAt: Date.now() }, { merge: true });
+      if (ownerId === currentUser.id) {
+        currentUser.storyStatuses = nextStatuses;
+        updateLocalCurrentUser();
+      }
+      await getActiveStatuses();
+    } catch (error) {
+      console.warn("Não foi possível registrar interação no status:", error);
+    }
+  }
+
+  async function markStatusViewed(ownerId, statusId) {
+    if (ownerId === currentUser?.id) return;
+    await updateStatusInteraction(ownerId, statusId, "view");
+  }
+
+  async function likeStatus(ownerId, statusId) {
+    await updateStatusInteraction(ownerId, statusId, "like");
+    await getActiveStatuses();
+    if (currentStatusOwnerId === ownerId) openStatusViewer(ownerId, true);
+    showToast("Status curtido.", "success");
+  }
+
+  function openStatusViewer(ownerId, keepOpen = false) {
     currentStatusOwnerId = ownerId;
     const items = statusFeedCache.filter(s => s.ownerId === ownerId).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
     const overlay = document.getElementById("statusViewerOverlay");
@@ -998,6 +1091,7 @@
     }
 
     const latest = items[0];
+    items.forEach(item => { if (item.ownerId !== currentUser?.id) markStatusViewed(item.ownerId, item.id); });
     title.innerText = latest.ownerName || "Status";
     content.innerHTML = items.map(item => `
       <div class="status-entry">
@@ -1010,11 +1104,20 @@
         </div>
         ${item.type === "image" && item.imageData ? `<img src="${escapeAttr(item.imageData)}" alt="Status" />` : ""}
         ${item.text ? `<div class="${item.type === "text" ? "status-preview-text" : "status-entry-text"}">${escapeHtml(item.text)}</div>` : (item.type === "text" ? `<div class="status-preview-text">Status sem texto</div>` : "")}
+        <div class="status-entry-actions">
+          <span class="status-entry-meta">${escapeHtml(statusViewsText(item))}</span>
+          ${item.ownerId !== currentUser?.id ? `<button class="${hasCurrentUserInStatusArray(item.likedBy) ? "liked" : ""}" onclick="likeStatus('${escapeAttr(item.ownerId)}','${escapeAttr(item.id)}')">${hasCurrentUserInStatusArray(item.likedBy) ? "❤️ Curtido" : "♡ Curtir"}</button>` : ""}
+        </div>
+        ${statusViewersHtml(item)}
       </div>
     `).join("");
 
     overlay.classList.add("active");
-    startStatusViewerAutoClose();
+    if (ownerId === currentUser?.id || keepOpen) {
+      stopStatusViewerAutoClose();
+    } else {
+      startStatusViewerAutoClose();
+    }
   }
 
   function closeStatusViewer() {
@@ -1192,7 +1295,7 @@
           storyStatuses: fresh,
           lastStoryAt: fresh[0]?.createdAt || 0,
           updatedAt: Date.now(),
-          appVersion: "4.0"
+          appVersion: "4.1.1"
         }, { merge: true });
 
         currentUser.storyStatuses = fresh;
@@ -1259,7 +1362,7 @@
       lastActiveAt: now,
       presenceUpdatedAt: now,
       updatedAt: now,
-      appVersion: "4.0"
+      appVersion: "4.1.1"
     };
 
     if (!isOnline) payload.lastSeen = now;
@@ -1369,7 +1472,7 @@
       lastSeen: null,
       lastActiveAt: Date.now(),
       presenceUpdatedAt: Date.now(),
-      appVersion: "4.0",
+      appVersion: "4.1.1",
       createdAt: Date.now(),
       updatedAt: Date.now()
     };
@@ -1409,7 +1512,7 @@
           lastActiveAt: Date.now(),
           presenceUpdatedAt: Date.now(),
           updatedAt: Date.now(),
-          appVersion: "4.0"
+          appVersion: "4.1.1"
         }, { merge: true });
 
         localStorage.setItem("zappi_current_user", JSON.stringify(currentUser));
@@ -2112,7 +2215,7 @@
         await db.collection("users").doc(currentUser.id).set({
           statusText,
           updatedAt: Date.now(),
-          appVersion: "4.0"
+          appVersion: "4.1.1"
         }, { merge: true });
 
         await updateMyStatusInConversations(statusText);
@@ -2281,6 +2384,7 @@
   function updateCallMediaButtons() {
     const muteBtn = document.getElementById("callMuteBtn");
     const cameraBtn = document.getElementById("callCameraBtn");
+    const flipBtn = document.getElementById("callFlipCameraBtn");
     const mediaControls = document.getElementById("callMediaControls");
     const videoArea = document.getElementById("callVideoArea");
     const hasVideo = currentCallMediaType === "video";
@@ -2296,6 +2400,10 @@
       cameraBtn.style.display = hasVideo ? "inline-flex" : "none";
       const videoTrack = localCallStream ? localCallStream.getVideoTracks()[0] : null;
       cameraBtn.innerText = videoTrack && videoTrack.enabled ? "📷 Câmera" : "🚫 Câmera";
+    }
+    if (flipBtn) {
+      flipBtn.style.display = hasVideo ? "inline-flex" : "none";
+      flipBtn.innerText = callVideoFacingMode === "user" ? "🔄 Traseira" : "🔄 Frontal";
     }
   }
 
@@ -2318,6 +2426,40 @@
     if (!localCallStream) return;
     localCallStream.getVideoTracks().forEach(track => track.enabled = !track.enabled);
     updateCallMediaButtons();
+  }
+
+  async function flipCallCamera() {
+    if (currentCallMediaType !== "video" || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
+    try {
+      const nextFacing = callVideoFacingMode === "user" ? "environment" : "user";
+      const newStream = await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: { facingMode: { ideal: nextFacing }, width: { ideal: 640 }, height: { ideal: 480 } }
+      });
+      const newVideoTrack = newStream.getVideoTracks()[0];
+      if (!newVideoTrack) throw new Error("Não foi possível abrir a outra câmera.");
+
+      const oldVideoTrack = localCallStream ? localCallStream.getVideoTracks()[0] : null;
+      if (currentPeerConnection) {
+        const sender = currentPeerConnection.getSenders().find(s => s.track && s.track.kind === "video");
+        if (sender) await sender.replaceTrack(newVideoTrack);
+      }
+      if (localCallStream) {
+        if (oldVideoTrack) {
+          localCallStream.removeTrack(oldVideoTrack);
+          try { oldVideoTrack.stop(); } catch {}
+        }
+        localCallStream.addTrack(newVideoTrack);
+      } else {
+        localCallStream = new MediaStream([newVideoTrack]);
+      }
+      callVideoFacingMode = nextFacing;
+      attachLocalVideoPreview();
+      showToast(callVideoFacingMode === "user" ? "Câmera frontal ativada." : "Câmera traseira ativada.", "success");
+    } catch (error) {
+      console.error("Erro ao virar câmera:", error);
+      alert(error.message || "Não foi possível virar a câmera neste celular.");
+    }
   }
 
   function callContactName() {
@@ -2423,7 +2565,7 @@
       throw new Error("Este navegador não permite ligação de " + callTypeLabel(type) + ".");
     }
     const constraints = type === "video"
-      ? { audio: true, video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } } }
+      ? { audio: true, video: { facingMode: { ideal: callVideoFacingMode }, width: { ideal: 640 }, height: { ideal: 480 } } }
       : { audio: true, video: false };
     localCallStream = await navigator.mediaDevices.getUserMedia(constraints);
     attachLocalVideoPreview();
