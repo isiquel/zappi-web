@@ -85,7 +85,30 @@
     .msg{max-width:78%;padding:10px 12px;border-radius:14px;font-size:14px;line-height:1.35;box-shadow:0 1px 2px rgba(0,0,0,.12);word-wrap:break-word;flex-shrink:0}
     .msg.me{align-self:flex-end;background:#d9fdd3;border-bottom-right-radius:4px}
     .msg.other{align-self:flex-start;background:white;border-bottom-left-radius:4px}
-    .msg small{display:block;text-align:right;font-size:10px;opacity:.55;margin-top:4px}
+
+    .msg small{
+      display:flex;
+      justify-content:flex-end;
+      align-items:center;
+      gap:4px;
+      text-align:right;
+      font-size:10px;
+      opacity:.75;
+      margin-top:4px;
+    }
+
+    .msg-status{
+      font-size:12px;
+      font-weight:900;
+      letter-spacing:-2px;
+      color:#777;
+      margin-left:3px;
+    }
+
+    .msg-status.read{
+      color:#34B7F1;
+    }
+
     .msg-img-wrap{padding:4px;background:transparent}
     .msg-img{display:block;max-width:230px;max-height:260px;border-radius:12px;object-fit:cover;cursor:pointer;background:#ddd}
     .msg-caption{font-size:13px;margin-top:6px}
@@ -155,7 +178,7 @@
       </div>
 
       <div class="notice">
-        Versão 2.4: foto de perfil grátis, comprimida e salva no Firestore.
+        Versão 2.5: mensagem enviada, entregue e lida com dois risquinhos azuis.
       </div>
     </div>
   </div>
@@ -287,7 +310,7 @@
     if (!("serviceWorker" in navigator)) return null;
 
     try {
-      const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js?v=90", {
+      const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js?v=100", {
         scope: "/"
       });
 
@@ -1090,14 +1113,37 @@
 
     const otherId = activeChat.contactUserId || ("user_" + activeChat.phone);
     const conversationId = getConversationId(currentUser.id, otherId);
+    const now = Date.now();
 
     const data = {};
-    data["readBy." + currentUser.id] = Date.now();
+    data["readBy." + currentUser.id] = now;
 
     try {
       await db.collection("conversations").doc(conversationId).set(data, { merge: true });
+
+      const unreadSnap = await db.collection("conversations")
+        .doc(conversationId)
+        .collection("messages")
+        .where("receiverId", "==", currentUser.id)
+        .where("readAt", "==", null)
+        .get();
+
+      if (!unreadSnap.empty) {
+        const batch = db.batch();
+
+        unreadSnap.docs.forEach(doc => {
+          batch.set(doc.ref, {
+            deliveredAt: now,
+            readAt: now,
+            read: true
+          }, { merge: true });
+        });
+
+        await batch.commit();
+      }
+
     } catch (e) {
-      console.error(e);
+      console.error("Erro ao marcar conversa como lida:", e);
     }
   }
 
@@ -1153,6 +1199,20 @@
     }
   }
 
+  function getMessageStatusHtml(message, mine) {
+    if (!mine) return "";
+
+    if (message.readAt) {
+      return `<span class="msg-status read">✓✓</span>`;
+    }
+
+    if (message.deliveredAt) {
+      return `<span class="msg-status">✓✓</span>`;
+    }
+
+    return `<span class="msg-status">✓</span>`;
+  }
+
   function renderMessages(messages) {
     const chatBody = document.getElementById("chatBody");
 
@@ -1163,6 +1223,7 @@
 
     chatBody.innerHTML = messages.map(m => {
       const mine = m.senderId === currentUser.id;
+      const status = getMessageStatusHtml(m, mine);
 
       if (m.type === "image") {
         const img = m.imageData || m.imageUrl || "";
@@ -1171,7 +1232,7 @@
           <div class="msg ${mine ? "me" : "other"} msg-img-wrap">
             <img class="msg-img" src="${escapeAttr(img)}" onclick="openImageFull('${escapeAttr(img)}')" />
             ${m.text ? `<div class="msg-caption">${escapeHtml(m.text)}</div>` : ""}
-            <small>${m.timeText || ""}</small>
+            <small>${m.timeText || ""}${status}</small>
           </div>
         `;
       }
@@ -1179,7 +1240,7 @@
       return `
         <div class="msg ${mine ? "me" : "other"}">
           ${escapeHtml(m.text || "")}
-          <small>${m.timeText || ""}</small>
+          <small>${m.timeText || ""}${status}</small>
         </div>
       `;
     }).join("");
@@ -1462,6 +1523,8 @@
       fileName: fileName || "",
       createdAt: Date.now(),
       timeText: nowText(),
+      deliveredAt: null,
+      readAt: null,
       read: false
     };
 
@@ -1497,7 +1560,17 @@
         readBy
       }, { merge: true });
 
-      await convRef.collection("messages").add(message);
+      const messageRef = await convRef.collection("messages").add(message);
+
+      setTimeout(async () => {
+        try {
+          await messageRef.set({
+            deliveredAt: Date.now()
+          }, { merge: true });
+        } catch (error) {
+          console.error("Erro ao marcar como entregue:", error);
+        }
+      }, 600);
 
       await sendPushNotificationToUser(
         otherId,
@@ -1735,7 +1808,7 @@
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", async () => {
       try {
-        await navigator.serviceWorker.register("sw.js?v=90");
+        await navigator.serviceWorker.register("sw.js?v=100");
       } catch (error) {
         console.error(error);
       }
