@@ -210,6 +210,15 @@
     </div>
   </div>
 
+  <div id="imageSourceMenu" class="msg-menu-overlay" onclick="closeImageSourceMenu()">
+    <div class="msg-menu-box" onclick="event.stopPropagation()">
+      <h3>Enviar foto</h3>
+      <button class="btn-primary" onclick="openCameraPicker()">📷 Tirar foto agora</button>
+      <button class="btn-light" onclick="openGalleryPicker()">🖼️ Escolher da galeria</button>
+      <button class="cancel" onclick="closeImageSourceMenu()">Cancelar</button>
+    </div>
+  </div>
+
   <div id="forwardOverlay" class="forward-overlay" onclick="closeForwardPicker()">
     <div class="forward-box" onclick="event.stopPropagation()">
       <h3>Encaminhar para</h3>
@@ -255,7 +264,7 @@
       </div>
 
       <div class="notice">
-        Versão 3.5: salvar imagem no celular, separador de datas, visual melhorado nas fotos e presença automática.
+        Versão 3.6: escolha entre tirar foto na hora ou enviar imagem da galeria, mantendo salvar imagem e presença automática.
       </div>
     </div>
   </div>
@@ -323,8 +332,9 @@
     </div>
 
     <div class="chat-input">
-      <input id="imageInput" class="hidden-file" type="file" accept="image/*" onchange="handleImageSelected(event)" />
-      <button class="attach-btn" onclick="document.getElementById('imageInput').click()">📷</button>
+      <input id="galleryInput" class="hidden-file" type="file" accept="image/*" onchange="handleImageSelected(event)" />
+      <input id="cameraInput" class="hidden-file" type="file" accept="image/*" capture="environment" onchange="handleImageSelected(event)" />
+      <button class="attach-btn" onclick="openImageSourceMenu()">📷</button>
       <button id="micButton" class="mic-btn" onclick="startAudioRecording()">🎤</button>
       <input id="messageInput" type="text" placeholder="Digite uma mensagem..." oninput="handleTypingInput()" onkeydown="handleMessageKey(event)" />
       <button id="sendButton" class="send-btn" onclick="sendMessage()">➤</button>
@@ -441,7 +451,7 @@
     if (!("serviceWorker" in navigator)) return null;
 
     try {
-      const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js?v=182", { scope: "/" });
+      const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js?v=183", { scope: "/" });
       await navigator.serviceWorker.ready;
       if (registration && registration.update) registration.update();
       return registration;
@@ -2432,6 +2442,29 @@
     scrollChatToBottom();
   }
 
+  function openImageSourceMenu() {
+    if (editingMessageId) return alert("Finalize ou cancele a edição antes de enviar imagem.");
+    if (!activeChat) return alert("Abra uma conversa primeiro.");
+    document.getElementById("imageSourceMenu").classList.add("active");
+  }
+
+  function closeImageSourceMenu() {
+    const menu = document.getElementById("imageSourceMenu");
+    if (menu) menu.classList.remove("active");
+  }
+
+  function openGalleryPicker() {
+    closeImageSourceMenu();
+    const input = document.getElementById("galleryInput");
+    if (input) input.click();
+  }
+
+  function openCameraPicker() {
+    closeImageSourceMenu();
+    const input = document.getElementById("cameraInput");
+    if (input) input.click();
+  }
+
   async function handleImageSelected(event) {
     if (editingMessageId) return alert("Finalize ou cancele a edição antes de enviar imagem.");
 
@@ -3076,7 +3109,7 @@
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", async () => {
       try {
-        await navigator.serviceWorker.register("sw.js?v=182");
+        await navigator.serviceWorker.register("sw.js?v=183");
       } catch (error) {
         console.error(error);
       }
