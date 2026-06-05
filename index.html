@@ -323,7 +323,7 @@
       </div>
 
       <div class="notice">
-        Versão 3.9.3: perfil mais limpo, sem mensagens técnicas, mantendo limpeza automática de 7 dias.
+        Versão 3.9.4: perfil mais limpo, sem mensagens técnicas, mantendo limpeza automática de 7 dias.
       </div>
     </div>
   </div>
@@ -532,7 +532,7 @@
     if (!("serviceWorker" in navigator)) return null;
 
     try {
-      const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js?v=193", { scope: "/" });
+      const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js?v=194", { scope: "/" });
       await navigator.serviceWorker.ready;
       if (registration && registration.update) registration.update();
       return registration;
@@ -807,7 +807,7 @@
         storyStatuses: nextStatuses,
         lastStoryAt: item.createdAt,
         updatedAt: Date.now(),
-        appVersion: "3.9.3"
+        appVersion: "3.9.4"
       }, { merge: true });
 
       currentUser.storyStatuses = nextStatuses;
@@ -1130,7 +1130,7 @@
           storyStatuses: fresh,
           lastStoryAt: fresh[0]?.createdAt || 0,
           updatedAt: Date.now(),
-          appVersion: "3.9.3"
+          appVersion: "3.9.4"
         }, { merge: true });
 
         currentUser.storyStatuses = fresh;
@@ -1197,7 +1197,7 @@
       lastActiveAt: now,
       presenceUpdatedAt: now,
       updatedAt: now,
-      appVersion: "3.9.3"
+      appVersion: "3.9.4"
     };
 
     if (!isOnline) payload.lastSeen = now;
@@ -1307,7 +1307,7 @@
       lastSeen: null,
       lastActiveAt: Date.now(),
       presenceUpdatedAt: Date.now(),
-      appVersion: "3.9.3",
+      appVersion: "3.9.4",
       createdAt: Date.now(),
       updatedAt: Date.now()
     };
@@ -1347,7 +1347,7 @@
           lastActiveAt: Date.now(),
           presenceUpdatedAt: Date.now(),
           updatedAt: Date.now(),
-          appVersion: "3.9.3"
+          appVersion: "3.9.4"
         }, { merge: true });
 
         localStorage.setItem("zappi_current_user", JSON.stringify(currentUser));
@@ -2050,7 +2050,7 @@
         await db.collection("users").doc(currentUser.id).set({
           statusText,
           updatedAt: Date.now(),
-          appVersion: "3.9.3"
+          appVersion: "3.9.4"
         }, { merge: true });
 
         await updateMyStatusInConversations(statusText);
@@ -3203,12 +3203,8 @@
     if (!activeChat || !currentUser) return;
 
     const ok = confirm(
-      "Limpar esta conversa?
-
-" +
-      "Isso vai apagar definitivamente do banco todas as mensagens NÃO favoritadas desta conversa.
-
-" +
+      "Limpar esta conversa?\n\n" +
+      "Isso vai apagar definitivamente do banco todas as mensagens NÃO favoritadas desta conversa.\n\n" +
       "Mensagens favoritadas serão preservadas."
     );
 
@@ -3231,73 +3227,54 @@
         const docsToDelete = [];
 
         snap.docs.forEach(doc => {
-          const data = doc.data() || {};
-          if (isProtectedMessage(data)) protectedDocs.push({ id: doc.id, ...data });
+          const message = doc.data() || {};
+          const favoriteBy = message.favoriteBy || [];
+          if (favoriteBy.includes(currentUser.id)) protectedDocs.push(doc);
           else docsToDelete.push(doc);
         });
 
         if (!docsToDelete.length) {
-          alert("Todas as mensagens desta conversa estão favoritadas/protegidas.");
+          alert("Todas as mensagens desta conversa estão favoritadas. Nada foi apagado.");
           return;
         }
 
-        let batch = db.batch();
-        let count = 0;
-        let deleted = 0;
-
-        for (const doc of docsToDelete) {
-          batch.delete(doc.ref);
-          count++;
-          deleted++;
-
-          if (count >= 450) {
-            await batch.commit();
-            batch = db.batch();
-            count = 0;
-          }
+        const batchSize = 450;
+        for (let i = 0; i < docsToDelete.length; i += batchSize) {
+          const batch = db.batch();
+          docsToDelete.slice(i, i + batchSize).forEach(doc => batch.delete(doc.ref));
+          await batch.commit();
         }
 
-        if (count > 0) await batch.commit();
+        const newestProtected = protectedDocs
+          .map(doc => ({ id: doc.id, ...doc.data() }))
+          .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))[0];
 
-        if (protectedDocs.length) {
-          protectedDocs.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-          const last = protectedDocs[0];
+        if (newestProtected) {
           await convRef.set({
-            lastMessage: "★ " + getMessagePreview(last),
-            updatedAt: last.createdAt || Date.now(),
+            lastMessage: getMessagePreview(newestProtected),
+            lastSenderId: newestProtected.senderId || "",
+            updatedAt: newestProtected.createdAt || Date.now(),
             hasFavorite: true
           }, { merge: true });
         } else {
-          try {
-            await convRef.delete();
-          } catch (deleteConvError) {
-            console.warn("Não foi possível apagar o documento da conversa, limpando prévia:", deleteConvError);
-            await convRef.set({
-              lastMessage: "Conversa limpa",
-              updatedAt: Date.now(),
-              hasFavorite: false
-            }, { merge: true });
-          }
+          await convRef.set({
+            lastMessage: "Conversa limpa",
+            lastSenderId: currentUser.id,
+            updatedAt: Date.now(),
+            hasFavorite: false
+          }, { merge: true });
         }
 
-        alert("Conversa limpa. Mensagens apagadas: " + deleted + ". Mensagens favoritadas preservadas: " + protectedDocs.length + ".");
-
-        if (!protectedDocs.length) {
-          closeChat();
-        } else {
-          markConversationAsRead();
-        }
+        alert("Conversa limpa. Mensagens favoritadas foram preservadas.");
       } else {
         const data = loadLocal();
-        const before = data.messages?.[conversationId] || [];
-        const after = before.filter(m => isProtectedMessage(m));
-        const deleted = before.length - after.length;
-        if (!data.messages) data.messages = {};
-        data.messages[conversationId] = after;
+        const messages = data.messages?.[conversationId] || [];
+        const kept = messages.filter(m => (m.favoriteBy || []).includes(currentUser.id));
+        data.messages[conversationId] = kept;
         saveLocal(data);
-        currentMessagesCache = after;
-        renderMessages(after);
-        alert("Conversa limpa. Mensagens apagadas: " + deleted + ". Mensagens favoritadas preservadas: " + after.length + ".");
+        currentMessagesCache = kept;
+        renderMessages(kept);
+        alert("Conversa limpa neste aparelho.");
       }
     } catch (error) {
       console.error("Erro ao limpar conversa:", error);
@@ -4048,7 +4025,7 @@
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", async () => {
       try {
-        await navigator.serviceWorker.register("sw.js?v=193");
+        await navigator.serviceWorker.register("sw.js?v=194");
       } catch (error) {
         console.error(error);
       }
