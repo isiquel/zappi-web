@@ -11,7 +11,17 @@ function initFirebaseAdmin() {
     throw new Error("FIREBASE_SERVICE_ACCOUNT não configurado na Vercel.");
   }
 
-  const serviceAccount = JSON.parse(serviceAccountJson);
+  let serviceAccount;
+
+  try {
+    serviceAccount = JSON.parse(serviceAccountJson);
+  } catch (error) {
+    throw new Error("FIREBASE_SERVICE_ACCOUNT não é um JSON válido.");
+  }
+
+  if (serviceAccount.private_key) {
+    serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, "\n");
+  }
 
   return admin.initializeApp({
     credential: admin.credential.cert(serviceAccount)
@@ -23,15 +33,17 @@ function buildAbsoluteUrl(url) {
 
   if (!url) return baseUrl + "/";
 
-  if (String(url).startsWith("http://") || String(url).startsWith("https://")) {
-    return String(url);
+  const value = String(url);
+
+  if (value.startsWith("http://") || value.startsWith("https://")) {
+    return value;
   }
 
-  if (String(url).startsWith("/")) {
-    return baseUrl + String(url);
+  if (value.startsWith("/")) {
+    return baseUrl + value;
   }
 
-  return baseUrl + "/" + String(url);
+  return baseUrl + "/" + value;
 }
 
 module.exports = async function handler(req, res) {
@@ -53,12 +65,7 @@ module.exports = async function handler(req, res) {
   try {
     initFirebaseAdmin();
 
-    const {
-      tokens,
-      title,
-      body,
-      url
-    } = req.body || {};
+    const { tokens, title, body, url } = req.body || {};
 
     if (!tokens || !Array.isArray(tokens) || tokens.length === 0) {
       return res.status(400).json({
@@ -76,12 +83,20 @@ module.exports = async function handler(req, res) {
       });
     }
 
+    /*
+      IMPORTANTE:
+      O Firebase estava recebendo vários tokens antigos.
+      Então a notificação podia chegar por um token velho, mas o clique não obedecia ao service worker novo.
+      Aqui usamos somente o token mais recente da lista.
+    */
+    const latestToken = validTokens[validTokens.length - 1];
+
     const finalTitle = String(title || "Nova mensagem no Zappi Web");
     const finalBody = String(body || "Você recebeu uma nova mensagem.");
     const finalUrl = buildAbsoluteUrl(url || "/");
 
     const message = {
-      tokens: validTokens,
+      token: latestToken,
 
       data: {
         title: finalTitle,
@@ -101,16 +116,13 @@ module.exports = async function handler(req, res) {
       }
     };
 
-    const response = await admin.messaging().sendEachForMulticast(message);
+    const response = await admin.messaging().send(message);
 
     return res.status(200).json({
       ok: true,
-      successCount: response.successCount,
-      failureCount: response.failureCount,
-      responses: response.responses.map(item => ({
-        success: item.success,
-        error: item.error ? item.error.message : null
-      }))
+      sentToLatestTokenOnly: true,
+      messageId: response,
+      url: finalUrl
     });
 
   } catch (error) {
