@@ -83,20 +83,17 @@ module.exports = async function handler(req, res) {
       });
     }
 
-    /*
-      IMPORTANTE:
-      O Firebase estava recebendo vários tokens antigos.
-      Então a notificação podia chegar por um token velho, mas o clique não obedecia ao service worker novo.
-      Aqui usamos somente o token mais recente da lista.
-    */
-    const latestToken = validTokens[validTokens.length - 1];
-
     const finalTitle = String(title || "Nova mensagem no Zappi Web");
     const finalBody = String(body || "Você recebeu uma nova mensagem.");
     const finalUrl = buildAbsoluteUrl(url || "/");
 
     const message = {
-      token: latestToken,
+      tokens: validTokens,
+
+      notification: {
+        title: finalTitle,
+        body: finalBody
+      },
 
       data: {
         title: finalTitle,
@@ -112,17 +109,33 @@ module.exports = async function handler(req, res) {
         },
         headers: {
           Urgency: "high"
+        },
+        notification: {
+          title: finalTitle,
+          body: finalBody,
+          icon: "/icon-192.png",
+          badge: "/icon-192.png",
+          requireInteraction: true,
+          silent: false,
+          vibrate: [300, 120, 300, 120, 300],
+          data: {
+            url: finalUrl
+          }
         }
       }
     };
 
-    const response = await admin.messaging().send(message);
+    const response = await admin.messaging().sendEachForMulticast(message);
 
     return res.status(200).json({
       ok: true,
-      sentToLatestTokenOnly: true,
-      messageId: response,
-      url: finalUrl
+      url: finalUrl,
+      successCount: response.successCount,
+      failureCount: response.failureCount,
+      responses: response.responses.map(item => ({
+        success: item.success,
+        error: item.error ? item.error.message : null
+      }))
     });
 
   } catch (error) {
