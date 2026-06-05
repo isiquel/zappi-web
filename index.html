@@ -130,6 +130,8 @@
     .msg-img{display:block;max-width:230px;max-height:260px;border-radius:12px;object-fit:cover;cursor:pointer;background:#ddd}
     .msg-img-actions{display:flex;justify-content:flex-end;gap:6px;margin-top:6px}
     .save-img-mini{background:rgba(7,94,84,.10);color:#075E54;border-radius:999px;padding:6px 9px;font-size:11px;font-weight:900}
+    .retention-notice{background:#fff8df;border:1px solid #ffe39c;color:#5b4300;padding:12px 13px;border-radius:16px;font-size:12px;line-height:1.45;margin-bottom:14px;box-shadow:0 5px 15px rgba(0,0,0,.04)}
+    .retention-notice strong{display:block;margin-bottom:4px;color:#6a4b00}
     .date-separator{align-self:center;background:rgba(255,255,255,.78);color:#53615d;font-size:11px;font-weight:900;padding:6px 11px;border-radius:999px;margin:9px 0 5px;box-shadow:0 1px 2px rgba(0,0,0,.10);text-transform:uppercase;letter-spacing:.2px}
     .msg-caption{font-size:13px;margin-top:6px}
     .uploading{opacity:.8;font-style:italic}
@@ -247,6 +249,7 @@
       <button class="btn-light" onclick="openForwardPicker()">Encaminhar</button>
       <button id="copyMessageBtn" class="btn-light" onclick="copySelectedMessage()">Copiar mensagem</button>
       <button id="saveImageBtn" class="btn-light" onclick="saveSelectedImage()">Salvar imagem</button>
+      <button id="saveAudioBtn" class="btn-light" onclick="saveSelectedAudio()">Salvar áudio</button>
       <button id="favoriteMessageBtn" class="btn-light" onclick="toggleFavoriteSelectedMessage()">Favoritar</button>
       <button id="editMessageBtn" class="btn-light" onclick="editSelectedMessage()">Editar</button>
       <button class="btn-light" onclick="deleteMessageForMe()">Apagar só para mim</button>
@@ -319,7 +322,7 @@
       </div>
 
       <div class="notice">
-        Versão 3.8.2: clique na foto abre o story; clique no nome abre contato/conversa.
+        Versão 3.9.2: clique na foto abre o story; clique no nome abre contato/conversa.
       </div>
     </div>
   </div>
@@ -467,6 +470,7 @@
   let activeStatusMap = {};
   let currentStatusOwnerId = "";
   let statusViewerTimer = null;
+  let cleanupRunning = false;
 
   let mediaRecorder = null;
   let audioChunks = [];
@@ -478,6 +482,8 @@
   let maxRecordingTimeout = null;
 
   const localKey = "zappi_web_v1_data";
+  const messageRetentionDays = 7;
+  const cleanupIntervalMs = 6 * 60 * 60 * 1000;
 
   function setAppHeight() {
     const height = window.visualViewport ? window.visualViewport.height : window.innerHeight;
@@ -524,7 +530,7 @@
     if (!("serviceWorker" in navigator)) return null;
 
     try {
-      const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js?v=189", { scope: "/" });
+      const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js?v=190", { scope: "/" });
       await navigator.serviceWorker.ready;
       if (registration && registration.update) registration.update();
       return registration;
@@ -799,7 +805,7 @@
         storyStatuses: nextStatuses,
         lastStoryAt: item.createdAt,
         updatedAt: Date.now(),
-        appVersion: "3.8.2"
+        appVersion: "3.9"
       }, { merge: true });
 
       currentUser.storyStatuses = nextStatuses;
@@ -967,6 +973,179 @@
     localStorage.setItem(localKey, JSON.stringify(data));
   }
 
+  function messageRetentionCutoff() {
+    return Date.now() - messageRetentionDays * 24 * 60 * 60 * 1000;
+  }
+
+  function isProtectedMessage(message) {
+    if (!message) return false;
+    if (message.keep === true || message.protected === true) return true;
+    const favoriteBy = message.favoriteBy || [];
+    return Array.isArray(favoriteBy) && favoriteBy.length > 0;
+  }
+
+  async function cleanupOldMessages(force = false) {
+    if (cleanupRunning || !currentUser) return { deleted: 0, cleared: 0 };
+
+    const lastCleanup = Number(localStorage.getItem("zappi_last_cleanup_at") || 0);
+    if (!force && Date.now() - lastCleanup < cleanupIntervalMs) return { deleted: 0, cleared: 0 };
+
+    cleanupRunning = true;
+    let deleted = 0;
+    let cleared = 0;
+    const cutoff = messageRetentionCutoff();
+
+    try {
+      if (firebaseReady && db) {
+        const convSnap = await db.collection("conversations")
+          .where("participants", "array-contains", currentUser.id)
+          .get();
+
+        for (const convDoc of convSnap.docs) {
+          const conv = convDoc.data() || {};
+          const participants = conv.participants || [];
+
+          try {
+            const oldSnap = await convDoc.ref.collection("messages")
+              .where("createdAt", "<", cutoff)
+              .limit(250)
+              .get();
+
+            const docsToClean = oldSnap.docs.filter(doc => !isProtectedMessage(doc.data() || {}));
+            if (!docsToClean.length) continue;
+
+            try {
+              let batch = db.batch();
+              let count = 0;
+
+              for (const doc of docsToClean) {
+                batch.delete(doc.ref);
+                count++;
+                deleted++;
+
+                if (count >= 450) {
+                  await batch.commit();
+                  batch = db.batch();
+                  count = 0;
+                }
+              }
+
+              if (count > 0) await batch.commit();
+            } catch (deleteError) {
+              console.warn("Não foi possível deletar mensagens antigas. Limpando mídia pesada:", deleteError);
+
+              let batch = db.batch();
+              let count = 0;
+
+              for (const doc of docsToClean) {
+                batch.set(doc.ref, {
+                  expired: true,
+                  deleted: true,
+                  deletedAt: Date.now(),
+                  deletedBy: "auto_cleanup_7_days",
+                  deletedFor: participants,
+                  text: "",
+                  imageData: "",
+                  imageUrl: "",
+                  audioData: "",
+                  audioMime: "",
+                  audioDuration: 0,
+                  fileName: "",
+                  type: "deleted"
+                }, { merge: true });
+
+                count++;
+                cleared++;
+
+                if (count >= 450) {
+                  await batch.commit();
+                  batch = db.batch();
+                  count = 0;
+                }
+              }
+
+              if (count > 0) await batch.commit();
+            }
+          } catch (convError) {
+            console.warn("Erro ao limpar uma conversa:", convError);
+          }
+        }
+
+        await cleanupOldOwnStories();
+      } else {
+        const data = loadLocal();
+        if (data.messages) {
+          Object.keys(data.messages).forEach(conversationId => {
+            const before = data.messages[conversationId] || [];
+            const after = before.filter(m => (m.createdAt || 0) >= cutoff || isProtectedMessage(m));
+            deleted += before.length - after.length;
+            data.messages[conversationId] = after;
+          });
+        }
+
+        if (data.statuses) {
+          data.statuses = data.statuses.filter(s => (s.createdAt || 0) >= statusCutoffTime());
+        }
+
+        saveLocal(data);
+      }
+
+      localStorage.setItem("zappi_last_cleanup_at", String(Date.now()));
+
+      if (force) {
+        alert(
+          "Limpeza concluída.\n\n" +
+          "Mensagens antigas apagadas: " + deleted + "\n" +
+          "Mídias antigas limpas: " + cleared + "\n\n" +
+          "Mensagens favoritadas foram preservadas."
+        );
+      }
+
+      return { deleted, cleared };
+    } catch (error) {
+      console.error("Erro geral na limpeza automática:", error);
+      if (force) alert("Não foi possível concluir a limpeza agora.");
+      return { deleted, cleared };
+    } finally {
+      cleanupRunning = false;
+    }
+  }
+
+  async function cleanupOldOwnStories() {
+    if (!firebaseReady || !db || !currentUser) return;
+
+    try {
+      const userRef = db.collection("users").doc(currentUser.id);
+      const userDoc = await userRef.get();
+      if (!userDoc.exists) return;
+
+      const userData = userDoc.data() || {};
+      const storyStatuses = Array.isArray(userData.storyStatuses) ? userData.storyStatuses : [];
+      const fresh = storyStatuses.filter(s => (s.createdAt || 0) >= statusCutoffTime());
+
+      if (fresh.length !== storyStatuses.length) {
+        await userRef.set({
+          storyStatuses: fresh,
+          lastStoryAt: fresh[0]?.createdAt || 0,
+          updatedAt: Date.now(),
+          appVersion: "3.9"
+        }, { merge: true });
+
+        currentUser.storyStatuses = fresh;
+        currentUser.lastStoryAt = fresh[0]?.createdAt || 0;
+        updateLocalCurrentUser();
+      }
+    } catch (error) {
+      console.warn("Erro ao limpar stories antigos:", error);
+    }
+  }
+
+  function runCleanupNow() {
+    cleanupOldMessages(true).then(() => {
+      if (document.getElementById("conversationList")) renderChats();
+    });
+  }
+
   function isPresenceOnline(userData) {
     if (!userData) return false;
     const lastActive = userData.lastActiveAt || userData.presenceUpdatedAt || 0;
@@ -1016,7 +1195,7 @@
       lastActiveAt: now,
       presenceUpdatedAt: now,
       updatedAt: now,
-      appVersion: "3.8.2"
+      appVersion: "3.9"
     };
 
     if (!isOnline) payload.lastSeen = now;
@@ -1126,7 +1305,7 @@
       lastSeen: null,
       lastActiveAt: Date.now(),
       presenceUpdatedAt: Date.now(),
-      appVersion: "3.8.2",
+      appVersion: "3.9",
       createdAt: Date.now(),
       updatedAt: Date.now()
     };
@@ -1166,7 +1345,7 @@
           lastActiveAt: Date.now(),
           presenceUpdatedAt: Date.now(),
           updatedAt: Date.now(),
-          appVersion: "3.8.2"
+          appVersion: "3.9"
         }, { merge: true });
 
         localStorage.setItem("zappi_current_user", JSON.stringify(currentUser));
@@ -1193,6 +1372,7 @@
     document.getElementById("homeScreen").classList.add("active");
     document.getElementById("topUserName").innerText = currentUser.name;
     startPresenceTracking();
+    setTimeout(() => cleanupOldMessages(false), 1500);
     openTab("chats");
 
     setTimeout(() => handleDeepLinkOpenChat(), 900);
@@ -1750,6 +1930,7 @@
         <div class="small-actions">
           <button class="btn-primary" onclick="copyMyContact()">Copiar contato</button>
           <button class="btn-light" onclick="requestNotificationPermission()">Ativar notificações</button>
+          <button class="btn-light" onclick="runCleanupNow()">Limpar antigas agora</button>
           <button class="btn-danger" onclick="logout()">Sair</button>
         </div>
       </div>
@@ -1869,7 +2050,7 @@
         await db.collection("users").doc(currentUser.id).set({
           statusText,
           updatedAt: Date.now(),
-          appVersion: "3.8.2"
+          appVersion: "3.9"
         }, { merge: true });
 
         await updateMyStatusInConversations(statusText);
@@ -2360,6 +2541,9 @@
               <span>🎤</span>
               <audio controls preload="metadata" src="${escapeAttr(audio)}" type="${escapeAttr(mime)}"></audio>
             </div>
+            <div class="msg-img-actions">
+              <button class="save-img-mini" onclick="event.stopPropagation();saveAudioFromData('${messageId}')">Salvar áudio</button>
+            </div>
             <small>${m.timeText || ""}${editedHtml}${status}</small>
             <button class="msg-menu-btn" onclick="event.stopPropagation();openMessageMenu('${messageId}', ${mine})">⋮</button>
           </div>
@@ -2394,6 +2578,7 @@
     const editBtn = document.getElementById("editMessageBtn");
     const copyBtn = document.getElementById("copyMessageBtn");
     const saveImageBtn = document.getElementById("saveImageBtn");
+    const saveAudioBtn = document.getElementById("saveAudioBtn");
     const favBtn = document.getElementById("favoriteMessageBtn");
 
     if (deleteForAllBtn) deleteForAllBtn.style.display = selectedMessageMine ? "block" : "none";
@@ -2423,6 +2608,16 @@
         !message.deleted &&
         message.type === "image" &&
         (message.imageData || message.imageUrl)
+          ? "block"
+          : "none";
+    }
+
+    if (saveAudioBtn) {
+      saveAudioBtn.style.display =
+        message &&
+        !message.deleted &&
+        message.type === "audio" &&
+        message.audioData
           ? "block"
           : "none";
     }
@@ -2495,6 +2690,45 @@
   function saveSelectedImage() {
     if (!selectedMessageId) return;
     saveImageFromData(selectedMessageId);
+    closeMessageMenu();
+  }
+
+  function audioExtension(audioData, audioMime) {
+    const source = String(audioMime || audioData || "").toLowerCase();
+    if (source.includes("mpeg") || source.includes("mp3")) return "mp3";
+    if (source.includes("ogg")) return "ogg";
+    if (source.includes("wav")) return "wav";
+    if (source.includes("mp4") || source.includes("m4a")) return "m4a";
+    return "webm";
+  }
+
+  function saveAudioFromData(messageId) {
+    const message = currentMessagesCache.find(m => m.id === messageId);
+
+    if (!message || message.deleted || message.type !== "audio") {
+      return alert("Áudio não encontrado para salvar.");
+    }
+
+    const audioData = message.audioData || "";
+    if (!audioData) return alert("Áudio não encontrado para salvar.");
+
+    try {
+      const link = document.createElement("a");
+      const ext = audioExtension(audioData, message.audioMime || "");
+      link.href = audioData;
+      link.download = "zappi-audio-" + Date.now() + "." + ext;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (error) {
+      console.error("Erro ao salvar áudio:", error);
+      alert("Não foi possível salvar automaticamente. Abra o áudio e tente baixar pelo navegador.");
+    }
+  }
+
+  function saveSelectedAudio() {
+    if (!selectedMessageId) return;
+    saveAudioFromData(selectedMessageId);
     closeMessageMenu();
   }
 
@@ -2828,6 +3062,7 @@
       deleted: false,
       deletedFor: [],
       createdAt: Date.now(),
+      expiresAt: Date.now() + messageRetentionDays * 24 * 60 * 60 * 1000,
       timeText: nowText(),
       deliveredAt: null,
       readAt: null,
@@ -3429,6 +3664,7 @@
       deleted: false,
       deletedFor: [],
       createdAt: Date.now(),
+      expiresAt: Date.now() + messageRetentionDays * 24 * 60 * 60 * 1000,
       timeText: nowText(),
       deliveredAt: null,
       readAt: null,
@@ -3699,7 +3935,7 @@
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", async () => {
       try {
-        await navigator.serviceWorker.register("sw.js?v=189");
+        await navigator.serviceWorker.register("sw.js?v=190");
       } catch (error) {
         console.error(error);
       }
