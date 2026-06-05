@@ -49,9 +49,13 @@
     .profile-box{display:flex;gap:14px;align-items:center;background:white;padding:16px;border-radius:18px;box-shadow:0 6px 18px rgba(0,0,0,.07);margin-bottom:14px}
     .avatar{width:52px;height:52px;border-radius:50%;background:#128C7E;color:white;display:flex;justify-content:center;align-items:center;font-weight:900;font-size:20px;flex-shrink:0;overflow:hidden}
     .avatar.small{width:42px;height:42px;font-size:16px}
+    .avatar.big{width:78px;height:78px;font-size:28px}
+    .avatar img{width:100%;height:100%;object-fit:cover;display:block}
     .profile-info{flex:1;min-width:0}
     .profile-info h3{font-size:17px;margin-bottom:4px}
     .profile-info p{font-size:13px;color:#666;word-break:break-word}
+    .profile-photo-row{display:flex;align-items:center;gap:14px;background:#f7fbfa;border:1px solid #e1efec;border-radius:16px;padding:12px}
+    .profile-photo-actions{flex:1;display:flex;flex-direction:column;gap:8px}
     .list{display:flex;flex-direction:column;gap:10px}
     .contact-item{background:white;border-radius:16px;padding:14px;display:flex;align-items:center;gap:12px;box-shadow:0 4px 14px rgba(0,0,0,.06);cursor:pointer;position:relative}
     .contact-main{flex:1;min-width:0}
@@ -99,7 +103,8 @@
 
     .in-app-toast{position:absolute;top:14px;left:14px;right:14px;z-index:9999;background:#075E54;color:white;padding:13px 14px;border-radius:16px;box-shadow:0 10px 25px rgba(0,0,0,.25);display:none;align-items:center;gap:10px;cursor:pointer;animation:slideDown .25s ease-out}
     .in-app-toast.active{display:flex}
-    .toast-avatar{width:38px;height:38px;border-radius:50%;background:#128C7E;display:flex;align-items:center;justify-content:center;font-weight:900;flex-shrink:0}
+    .toast-avatar{width:38px;height:38px;border-radius:50%;background:#128C7E;display:flex;align-items:center;justify-content:center;font-weight:900;flex-shrink:0;overflow:hidden}
+    .toast-avatar img{width:100%;height:100%;object-fit:cover}
     .toast-text{flex:1;min-width:0}
     .toast-text strong,.toast-text span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     .toast-text strong{font-size:14px;margin-bottom:2px}
@@ -150,7 +155,7 @@
       </div>
 
       <div class="notice">
-        Versão 2.3: envio de imagem grátis, comprimida e salva no Firestore.
+        Versão 2.4: foto de perfil grátis, comprimida e salva no Firestore.
       </div>
     </div>
   </div>
@@ -230,6 +235,7 @@
   let pendingOpenChatUserId = null;
   let deepLinkAlreadyHandled = false;
   let isUploadingImage = false;
+  let isUploadingProfilePhoto = false;
   let tempUploadId = "";
 
   const localKey = "zappi_web_v1_data";
@@ -281,7 +287,7 @@
     if (!("serviceWorker" in navigator)) return null;
 
     try {
-      const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js?v=80", {
+      const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js?v=90", {
         scope: "/"
       });
 
@@ -332,6 +338,18 @@
     return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
   }
 
+  function avatarInnerHtml(name, photoData) {
+    if (photoData) {
+      return `<img src="${escapeAttr(photoData)}" alt="${escapeAttr(name || "Perfil")}" />`;
+    }
+
+    return escapeHtml(initials(name || "Z"));
+  }
+
+  function avatarHtml(name, photoData, extraClass = "") {
+    return `<div class="avatar ${extraClass}">${avatarInnerHtml(name, photoData)}</div>`;
+  }
+
   function nowText() {
     return new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
   }
@@ -367,6 +385,7 @@
       phone,
       email,
       photoUrl: "",
+      photoData: "",
       createdAt: Date.now(),
       updatedAt: Date.now()
     };
@@ -392,10 +411,21 @@
       currentUser = JSON.parse(savedFirebaseUser);
 
       if (firebaseReady) {
+        const userDoc = await db.collection("users").doc(currentUser.id).get();
+
+        if (userDoc.exists) {
+          currentUser = {
+            ...currentUser,
+            ...userDoc.data()
+          };
+        }
+
         await db.collection("users").doc(currentUser.id).set({
           ...currentUser,
           updatedAt: Date.now()
         }, { merge: true });
+
+        localStorage.setItem("zappi_current_user", JSON.stringify(currentUser));
       }
 
       showHome();
@@ -407,6 +437,12 @@
     if (data.user) {
       currentUser = data.user;
       showHome();
+    }
+  }
+
+  function updateLocalCurrentUser() {
+    if (currentUser) {
+      localStorage.setItem("zappi_current_user", JSON.stringify(currentUser));
     }
   }
 
@@ -449,7 +485,8 @@
         savedName: sender.name || "Contato",
         phone: sender.phone || "",
         contactUserId: sender.id,
-        photoUrl: sender.photoUrl || ""
+        photoUrl: sender.photoUrl || "",
+        photoData: sender.photoData || ""
       };
 
       openChat(contactToOpen);
@@ -497,6 +534,22 @@
         .get();
 
       contacts = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+      for (let i = 0; i < contacts.length; i++) {
+        const contact = contacts[i];
+        const contactId = contact.contactUserId || ("user_" + contact.phone);
+        const zappiUser = await getUserById(contactId);
+
+        if (zappiUser) {
+          contacts[i] = {
+            ...contact,
+            name: contact.savedName || contact.name || zappiUser.name,
+            phone: contact.phone || zappiUser.phone || "",
+            photoData: zappiUser.photoData || contact.photoData || "",
+            photoUrl: zappiUser.photoUrl || contact.photoUrl || ""
+          };
+        }
+      }
     } else {
       contacts = loadLocal().contacts || [];
     }
@@ -543,10 +596,11 @@
   function contactItemHtml(c) {
     const name = c.name || c.savedName || "Contato";
     const phone = c.phone || "";
+    const photo = c.photoData || c.photoUrl || "";
 
     return `
       <div class="contact-item" onclick="openChatFromEncoded('${safeJson(c)}')">
-        <div class="avatar">${initials(name)}</div>
+        ${avatarHtml(name, photo)}
         <div class="contact-main">
           <h4>${escapeHtml(name)}</h4>
           <p>${escapeHtml(phone)} · Toque para conversar</p>
@@ -557,10 +611,11 @@
 
   function conversationItemHtml(c) {
     const unread = c.unread === true;
+    const photo = c.photoData || c.photoUrl || "";
 
     return `
       <div class="contact-item" onclick="openChatFromEncoded('${safeJson(c)}')">
-        <div class="avatar">${initials(c.name || "Contato")}</div>
+        ${avatarHtml(c.name || "Contato", photo)}
         <div class="contact-main">
           <h4>${escapeHtml(c.name || "Contato")}</h4>
           <p class="${unread ? "unread-text" : ""}">${escapeHtml(c.lastMessage || "Toque para conversar")}</p>
@@ -642,6 +697,7 @@
         phone: clean,
         contactUserId: zappiUser ? zappiUser.id : (userId || "user_" + clean),
         photoUrl: zappiUser ? zappiUser.photoUrl || "" : "",
+        photoData: zappiUser ? zappiUser.photoData || "" : "",
         createdAt: Date.now()
       });
     } else {
@@ -659,6 +715,7 @@
           phone: clean,
           contactUserId: userId || "user_" + clean,
           photoUrl: "",
+          photoData: "",
           createdAt: Date.now()
         });
 
@@ -705,7 +762,7 @@
 
     document.getElementById("tabContent").innerHTML = `
       <div class="profile-box">
-        <div class="avatar">${initials(currentUser.name)}</div>
+        ${avatarHtml(currentUser.name, currentUser.photoData || currentUser.photoUrl || "")}
         <div class="profile-info">
           <h3>${escapeHtml(currentUser.name)}</h3>
           <p>Seu contato Zappi: ${escapeHtml(currentUser.phone)}</p>
@@ -772,7 +829,8 @@
             name: contact?.savedName || contact?.name || otherUser?.name || fallback.name || "Contato",
             phone: contact?.phone || otherUser?.phone || fallback.phone || "",
             contactUserId: otherId,
-            photoUrl: otherUser?.photoUrl || fallback.photoUrl || "",
+            photoUrl: otherUser?.photoUrl || contact?.photoUrl || fallback.photoUrl || "",
+            photoData: otherUser?.photoData || contact?.photoData || fallback.photoData || "",
             lastMessage: conv.lastMessage || "Toque para conversar",
             timeText: formatTime(conv.updatedAt),
             unread:
@@ -816,15 +874,36 @@
   }
 
   function renderProfile() {
+    const photo = currentUser.photoData || currentUser.photoUrl || "";
+
     document.getElementById("tabContent").innerHTML = `
       <div class="profile-box">
-        <div class="avatar">${initials(currentUser.name)}</div>
+        ${avatarHtml(currentUser.name, photo)}
         <div class="profile-info">
           <h3>${escapeHtml(currentUser.name)}</h3>
           <p>${escapeHtml(currentUser.phone)}</p>
           <span class="pill">Meu contato Zappi</span>
         </div>
       </div>
+
+      <div class="card">
+        <label>Foto de perfil</label>
+
+        <div class="profile-photo-row">
+          ${avatarHtml(currentUser.name, photo, "big")}
+          <div class="profile-photo-actions">
+            <input id="profilePhotoInput" class="hidden-file" type="file" accept="image/*" onchange="handleProfilePhotoSelected(event)" />
+            <button class="btn-primary" onclick="document.getElementById('profilePhotoInput').click()">Escolher foto</button>
+            <button class="btn-light" onclick="removeProfilePhoto()">Remover foto</button>
+          </div>
+        </div>
+
+        <p class="hint">
+          A foto será comprimida e salva no Firestore. Não precisa Firebase Storage.
+        </p>
+      </div>
+
+      <br>
 
       <div class="card">
         <label>Compartilhe seu contato Zappi</label>
@@ -835,10 +914,6 @@
           <button class="btn-light" onclick="requestNotificationPermission()">Ativar notificações</button>
           <button class="btn-danger" onclick="logout()">Sair</button>
         </div>
-
-        <p class="hint">
-          As imagens agora são comprimidas e salvas no Firestore. Não precisa ativar Firebase Storage.
-        </p>
       </div>
 
       <br>
@@ -849,6 +924,115 @@
         <button class="btn-dark" onclick="installApp()">Instalar Zappi Web</button>
       </div>
     `;
+  }
+
+  async function handleProfilePhotoSelected(event) {
+    const file = event.target.files && event.target.files[0];
+    event.target.value = "";
+
+    if (!file) return;
+
+    if (!firebaseReady || !db || !currentUser) {
+      alert("O Firebase ainda não está conectado.");
+      return;
+    }
+
+    if (!file.type.startsWith("image/")) {
+      alert("Escolha apenas imagem ou foto.");
+      return;
+    }
+
+    if (isUploadingProfilePhoto) {
+      alert("Aguarde a foto anterior terminar.");
+      return;
+    }
+
+    isUploadingProfilePhoto = true;
+
+    try {
+      alert("Preparando foto de perfil...");
+
+      const photoData = await compressImageToBase64(file, 280, 0.62);
+
+      if (!photoData || photoData.length < 100) {
+        throw new Error("Falha ao preparar foto.");
+      }
+
+      if (photoData.length > 260000) {
+        throw new Error("A foto ficou grande demais. Tente outra imagem menor.");
+      }
+
+      currentUser.photoData = photoData;
+      currentUser.photoUrl = "";
+      currentUser.updatedAt = Date.now();
+
+      await db.collection("users").doc(currentUser.id).set({
+        photoData: photoData,
+        photoUrl: "",
+        updatedAt: Date.now()
+      }, { merge: true });
+
+      updateLocalCurrentUser();
+
+      await updateMyPhotoInConversations(photoData);
+
+      alert("Foto de perfil atualizada.");
+      renderProfile();
+
+    } catch (error) {
+      console.error("Erro ao atualizar foto de perfil:", error);
+      alert(error.message || "Não foi possível atualizar a foto.");
+    } finally {
+      isUploadingProfilePhoto = false;
+    }
+  }
+
+  async function removeProfilePhoto() {
+    if (!currentUser || !firebaseReady || !db) return;
+
+    if (!confirm("Deseja remover sua foto de perfil?")) return;
+
+    currentUser.photoData = "";
+    currentUser.photoUrl = "";
+    currentUser.updatedAt = Date.now();
+
+    await db.collection("users").doc(currentUser.id).set({
+      photoData: "",
+      photoUrl: "",
+      updatedAt: Date.now()
+    }, { merge: true });
+
+    updateLocalCurrentUser();
+    await updateMyPhotoInConversations("");
+
+    alert("Foto removida.");
+    renderProfile();
+  }
+
+  async function updateMyPhotoInConversations(photoData) {
+    if (!firebaseReady || !db || !currentUser) return;
+
+    try {
+      const snap = await db.collection("conversations")
+        .where("participants", "array-contains", currentUser.id)
+        .get();
+
+      const batch = db.batch();
+
+      snap.docs.forEach(doc => {
+        const ref = db.collection("conversations").doc(doc.id);
+        const data = {};
+        data["participantInfo." + currentUser.id + ".photoData"] = photoData || "";
+        data["participantInfo." + currentUser.id + ".photoUrl"] = "";
+        data["participantInfo." + currentUser.id + ".name"] = currentUser.name || "";
+        data["participantInfo." + currentUser.id + ".phone"] = currentUser.phone || "";
+        batch.set(ref, data, { merge: true });
+      });
+
+      await batch.commit();
+    } catch (error) {
+      console.error("Erro ao atualizar foto nas conversas:", error);
+    }
   }
 
   function copyMyContact() {
@@ -873,10 +1057,11 @@
     document.getElementById("chatScreen").classList.add("active");
 
     const name = contact.name || contact.savedName || "Contato";
+    const photo = contact.photoData || contact.photoUrl || "";
 
     document.getElementById("chatContactName").innerText = name;
     document.getElementById("chatContactPhone").innerText = contact.phone || "";
-    document.getElementById("chatAvatar").innerText = initials(name);
+    document.getElementById("chatAvatar").innerHTML = avatarInnerHtml(name, photo);
 
     updateSaveContactBar();
     markConversationAsRead();
@@ -945,7 +1130,9 @@
                 name: newest.senderName || activeChat.name || "Contato",
                 lastMessage: newest.type === "image" ? "📷 Imagem recebida" : (newest.text || "Nova mensagem"),
                 contactUserId: newest.senderId,
-                phone: activeChat.phone || ""
+                phone: activeChat.phone || "",
+                photoData: activeChat.photoData || "",
+                photoUrl: activeChat.photoUrl || ""
               });
 
               markConversationAsRead();
@@ -1286,13 +1473,15 @@
       participantInfo[currentUser.id] = {
         name: currentUser.name,
         phone: currentUser.phone,
-        photoUrl: currentUser.photoUrl || ""
+        photoUrl: currentUser.photoUrl || "",
+        photoData: currentUser.photoData || ""
       };
 
       participantInfo[otherId] = {
         name: otherUser?.name || activeChat.name || activeChat.savedName || "Contato",
         phone: otherUser?.phone || activeChat.phone || "",
-        photoUrl: otherUser?.photoUrl || activeChat.photoUrl || ""
+        photoUrl: otherUser?.photoUrl || activeChat.photoUrl || "",
+        photoData: otherUser?.photoData || activeChat.photoData || ""
       };
 
       const readBy = {};
@@ -1364,9 +1553,11 @@
   function showToast(contact) {
     toastConversation = contact;
 
+    const photo = contact.photoData || contact.photoUrl || "";
+
     document.getElementById("toastTitle").innerText = "Nova mensagem de " + (contact.name || "Contato");
     document.getElementById("toastBody").innerText = contact.lastMessage || "Toque para abrir";
-    document.getElementById("toastAvatar").innerText = initials(contact.name || "Z");
+    document.getElementById("toastAvatar").innerHTML = avatarInnerHtml(contact.name || "Z", photo);
 
     const toast = document.getElementById("inAppToast");
     toast.classList.add("active");
@@ -1544,7 +1735,7 @@
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", async () => {
       try {
-        await navigator.serviceWorker.register("sw.js?v=80");
+        await navigator.serviceWorker.register("sw.js?v=90");
       } catch (error) {
         console.error(error);
       }
