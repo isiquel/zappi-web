@@ -92,18 +92,18 @@ self.addEventListener("notificationclick", (event) => {
           const clientUrl = new URL(client.url);
 
           if (clientUrl.origin === APP_ORIGIN) {
-            if ("focus" in client) {
-              await client.focus();
-            }
-
             if ("navigate" in client) {
               await client.navigate(urlToOpen);
+            }
+
+            if ("focus" in client) {
+              await client.focus();
             }
 
             return;
           }
         } catch (error) {
-          console.error("Erro ao focar app aberto:", error);
+          console.error("Erro ao abrir cliente existente:", error);
         }
       }
 
