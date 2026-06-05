@@ -1,3 +1,16 @@
+importScripts("https://www.gstatic.com/firebasejs/10.12.4/firebase-app-compat.js");
+importScripts("https://www.gstatic.com/firebasejs/10.12.4/firebase-messaging-compat.js");
+
+firebase.initializeApp({
+  apiKey: "AIzaSyBXQJGJPREafTPDIpbzDSSov2Ju3kvei3w",
+  authDomain: "zappi-web.firebaseapp.com",
+  projectId: "zappi-web",
+  storageBucket: "zappi-web.firebasestorage.app",
+  messagingSenderId: "675790989502",
+  appId: "1:675790989502:web:36a7f3d1bcbb3bfb1b96ef"
+});
+
+const messaging = firebase.messaging();
 const APP_ORIGIN = "https://zappi-web.vercel.app";
 
 self.addEventListener("install", (event) => {
@@ -24,39 +37,25 @@ function fullUrl(rawUrl) {
   return APP_ORIGIN + "/" + value;
 }
 
-function getPayloadData(event) {
-  try {
-    if (!event.data) return {};
+messaging.onBackgroundMessage((payload) => {
+  const title =
+    payload.data?.title ||
+    payload.notification?.title ||
+    "Nova mensagem no Zappi Web";
 
-    const payload = event.data.json();
+  const body =
+    payload.data?.body ||
+    payload.notification?.body ||
+    "Você recebeu uma nova mensagem.";
 
-    if (payload.data) {
-      return payload.data;
-    }
+  const url = fullUrl(
+    payload.data?.url ||
+    payload.data?.click_action ||
+    payload.fcmOptions?.link ||
+    "/"
+  );
 
-    if (payload.notification) {
-      return {
-        title: payload.notification.title,
-        body: payload.notification.body,
-        url: payload.fcmOptions?.link || payload.notification.click_action || "/"
-      };
-    }
-
-    return payload;
-  } catch (error) {
-    console.error("Erro ao ler payload push:", error);
-    return {};
-  }
-}
-
-self.addEventListener("push", (event) => {
-  const data = getPayloadData(event);
-
-  const title = data.title || "Nova mensagem no Zappi Web";
-  const body = data.body || "Você recebeu uma nova mensagem.";
-  const url = fullUrl(data.url || data.click_action || "/");
-
-  const options = {
+  self.registration.showNotification(title, {
     body,
     icon: "/icon-192.png",
     badge: "/icon-192.png",
@@ -68,11 +67,7 @@ self.addEventListener("push", (event) => {
     data: {
       url
     }
-  };
-
-  event.waitUntil(
-    self.registration.showNotification(title, options)
-  );
+  });
 });
 
 self.addEventListener("notificationclick", (event) => {
@@ -81,37 +76,6 @@ self.addEventListener("notificationclick", (event) => {
   const urlToOpen = fullUrl(event.notification?.data?.url || "/");
 
   event.waitUntil(
-    (async () => {
-      const allClients = await clients.matchAll({
-        type: "window",
-        includeUncontrolled: true
-      });
-
-      for (const client of allClients) {
-        try {
-          const clientUrl = new URL(client.url);
-
-          if (clientUrl.origin === APP_ORIGIN) {
-            if ("navigate" in client) {
-              await client.navigate(urlToOpen);
-            }
-
-            if ("focus" in client) {
-              await client.focus();
-            }
-
-            return;
-          }
-        } catch (error) {
-          console.error("Erro ao abrir cliente existente:", error);
-        }
-      }
-
-      if (clients.openWindow) {
-        return clients.openWindow(urlToOpen);
-      }
-
-      return null;
-    })()
+    clients.openWindow(urlToOpen)
   );
 });
