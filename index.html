@@ -93,6 +93,24 @@
     .presence-dot{position:absolute;right:1px;bottom:1px;width:13px;height:13px;border-radius:50%;background:#25D366;border:2px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.08)}
     .avatar.small .presence-dot{width:11px;height:11px;right:0;bottom:0}
 
+    .chat-name,.chat-head .avatar{cursor:pointer}
+    .contact-info-overlay{position:absolute;inset:0;background:rgba(0,0,0,.42);z-index:99997;display:none;align-items:flex-end;justify-content:center;padding:14px}
+    .contact-info-overlay.active{display:flex}
+    .contact-info-box{width:100%;max-width:440px;background:#fff;border-radius:24px 24px 18px 18px;box-shadow:0 -10px 30px rgba(0,0,0,.25);max-height:88vh;overflow-y:auto;padding:18px;display:flex;flex-direction:column;gap:14px}
+    .contact-info-top{display:flex;align-items:center;justify-content:space-between;gap:12px}
+    .contact-info-top h3{font-size:17px;color:#075E54}
+    .contact-info-close{width:38px;height:38px;border-radius:50%;background:#f1f5f4;color:#333;padding:0;font-size:22px}
+    .contact-info-profile{text-align:center;display:flex;flex-direction:column;align-items:center;gap:8px;padding:8px 0 4px}
+    .contact-info-profile .avatar{width:96px;height:96px;font-size:34px}
+    .contact-info-profile h2{font-size:22px;color:#111;max-width:100%;word-break:break-word}
+    .contact-info-status-line{font-size:12px;color:#128C7E;font-weight:900}
+    .contact-info-card{background:#f7fbfa;border:1px solid #e1efec;border-radius:18px;padding:13px;display:flex;flex-direction:column;gap:6px}
+    .contact-info-card strong{font-size:12px;color:#075E54;text-transform:uppercase;letter-spacing:.35px}
+    .contact-info-card span{font-size:14px;color:#333;word-break:break-word;line-height:1.35}
+    .favorite-list{display:flex;flex-direction:column;gap:8px}
+    .favorite-item{background:#fff;border:1px solid #e7eeee;border-radius:14px;padding:10px;font-size:13px;color:#333;line-height:1.35}
+    .favorite-item small{display:block;color:#777;margin-top:4px;font-size:11px}
+
     .chat-save-bar{display:none;height:44px;background:#fff8df;color:#5b4300;padding:8px 12px;border-bottom:1px solid #f0d98b;align-items:center;justify-content:space-between;gap:10px;font-size:12px;position:absolute;top:72px;left:0;right:0;z-index:19}
     .chat-save-bar.active{display:flex}
     .chat-save-bar button{padding:8px 10px;font-size:12px;border-radius:10px;background:#075E54;color:white;white-space:nowrap}
@@ -107,12 +125,11 @@
     .msg small{display:flex;justify-content:flex-end;align-items:center;gap:4px;text-align:right;font-size:10px;opacity:.75;margin-top:4px;padding-right:22px}
     .msg-status{font-size:12px;font-weight:900;letter-spacing:-2px;color:#777;margin-left:3px}
     .msg-status.read{color:#34B7F1}
-    .msg-img-wrap{padding:4px;background:transparent}
-    .msg-img{display:block;max-width:230px;max-height:260px;border-radius:12px;object-fit:cover;cursor:pointer;background:#ddd}
-    .msg-img-actions{display:flex;justify-content:flex-end;gap:6px;margin-top:6px}
-    .save-img-mini{background:rgba(7,94,84,.10);color:#075E54;border-radius:999px;padding:6px 9px;font-size:11px;font-weight:900}
-    .date-separator{align-self:center;background:rgba(255,255,255,.78);color:#53615d;font-size:11px;font-weight:900;padding:6px 11px;border-radius:999px;margin:9px 0 5px;box-shadow:0 1px 2px rgba(0,0,0,.10);text-transform:uppercase;letter-spacing:.2px}
-    .msg-caption{font-size:13px;margin-top:6px}
+    .msg-img-wrap{padding:5px;background:transparent;overflow:hidden}
+    .msg-img{display:block;width:100%;max-width:238px;max-height:290px;border-radius:13px;object-fit:cover;cursor:pointer;background:#ddd}
+    .msg-caption{font-size:13px;margin-top:6px;padding:0 5px 2px}
+    .save-photo-inline{margin-top:7px;width:100%;padding:8px 10px;border-radius:12px;background:#eef6f4;color:#075E54;font-size:12px;font-weight:900}
+    .date-separator{align-self:center;background:rgba(255,255,255,.9);color:#65706d;border-radius:999px;padding:6px 12px;font-size:11px;font-weight:900;box-shadow:0 1px 3px rgba(0,0,0,.08);margin:8px 0 4px}
     .uploading{opacity:.8;font-style:italic}
     .audio-msg{min-width:230px;display:flex;flex-direction:column;gap:6px}
     .audio-row{display:flex;align-items:center;gap:8px}
@@ -219,6 +236,16 @@
     </div>
   </div>
 
+  <div id="contactInfoOverlay" class="contact-info-overlay" onclick="closeContactInfo()">
+    <div class="contact-info-box" onclick="event.stopPropagation()">
+      <div class="contact-info-top">
+        <h3>Informações do contato</h3>
+        <button class="contact-info-close" onclick="closeContactInfo()">×</button>
+      </div>
+      <div id="contactInfoContent"></div>
+    </div>
+  </div>
+
   <div id="forwardOverlay" class="forward-overlay" onclick="closeForwardPicker()">
     <div class="forward-box" onclick="event.stopPropagation()">
       <h3>Encaminhar para</h3>
@@ -264,7 +291,7 @@
       </div>
 
       <div class="notice">
-        Versão 3.6: escolha entre tirar foto na hora ou enviar imagem da galeria, mantendo salvar imagem e presença automática.
+        Versão 3.7: informações do contato, mensagens favoritas da conversa e status/recado no perfil.
       </div>
     </div>
   </div>
@@ -290,8 +317,8 @@
   <div id="chatScreen" class="screen">
     <div class="chat-head">
       <div class="back" onclick="closeChat()">‹</div>
-      <div class="avatar small" id="chatAvatar">C</div>
-      <div class="chat-name">
+      <div class="avatar small" id="chatAvatar" onclick="openContactInfo()">C</div>
+      <div class="chat-name" onclick="openContactInfo()">
         <h3 id="chatContactName">Contato</h3>
         <p id="chatContactPhone">telefone</p>
       </div>
@@ -419,454 +446,7 @@
     window.visualViewport.addEventListener("resize", setAppHeight);
     window.visualViewport.addEventListener("scroll", setAppHeight);
   }
-
-  function readDeepLink() {
-    const params = new URLSearchParams(window.location.search);
-    const chat = params.get("chat");
-    if (chat) pendingOpenChatUserId = chat;
-  }
-
-  function receiveNotificationCommand() {
-    if (!("serviceWorker" in navigator)) return;
-
-    navigator.serviceWorker.addEventListener("message", (event) => {
-      const data = event.data || {};
-      if (data.type === "ZAPPI_OPEN_URL" && data.url) {
-        try {
-          const url = new URL(data.url);
-          const chat = url.searchParams.get("chat");
-          if (chat) {
-            pendingOpenChatUserId = chat;
-            deepLinkAlreadyHandled = false;
-            handleDeepLinkOpenChat();
-          }
-        } catch (error) {
-          console.error("Erro ao receber comando da notificação:", error);
-        }
-      }
-    });
-  }
-
-  async function forceRegisterFirebaseMessagingSW() {
-    if (!("serviceWorker" in navigator)) return null;
-
-    try {
-      const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js?v=183", { scope: "/" });
-      await navigator.serviceWorker.ready;
-      if (registration && registration.update) registration.update();
-      return registration;
-    } catch (error) {
-      console.error("Erro ao registrar firebase-messaging-sw:", error);
-      return null;
-    }
-  }
-
-  async function initFirebase() {
-    try {
-      firebase.initializeApp(firebaseConfig);
-      auth = firebase.auth();
-      db = firebase.firestore();
-
-      await auth.signInAnonymously();
-
-      try {
-        messaging = firebase.messaging();
-      } catch (err) {
-        messaging = null;
-        console.warn("Messaging não suportado neste navegador:", err);
-      }
-
-      firebaseReady = true;
-      document.getElementById("firebaseStatus").innerText = "Firebase";
-    } catch (error) {
-      console.error(error);
-      firebaseReady = false;
-      document.getElementById("firebaseStatus").innerText = "Modo local";
-    }
-  }
-
-  function cleanPhone(phone) {
-    return String(phone || "").replace(/\D/g, "");
-  }
-
-  function initials(name) {
-    const parts = String(name || "Z").trim().split(" ").filter(Boolean);
-    if (parts.length === 1) return parts[0][0]?.toUpperCase() || "Z";
-    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-  }
-
-  function avatarInnerHtml(name, photoData) {
-    if (photoData) return `<img src="${escapeAttr(photoData)}" alt="${escapeAttr(name || "Perfil")}" />`;
-    return escapeHtml(initials(name || "Z"));
-  }
-
-  function avatarHtml(name, photoData, extraClass = "") {
-    return `<div class="avatar ${extraClass}">${avatarInnerHtml(name, photoData)}</div>`;
-  }
-
-  function nowText() {
-    return new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
-  }
-
-  function formatTime(timestamp) {
-    if (!timestamp) return "";
-    return new Date(timestamp).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
-  }
-
-  function dayKey(timestamp) {
-    if (!timestamp) return "sem-data";
-    const d = new Date(timestamp);
-    return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
-  }
-
-  function formatDateSeparator(timestamp) {
-    if (!timestamp) return "Hoje";
-
-    const date = new Date(timestamp);
-    const today = new Date();
-    const yesterday = new Date();
-    yesterday.setDate(today.getDate() - 1);
-
-    const sameDay = (a, b) =>
-      a.getFullYear() === b.getFullYear() &&
-      a.getMonth() === b.getMonth() &&
-      a.getDate() === b.getDate();
-
-    if (sameDay(date, today)) return "Hoje";
-    if (sameDay(date, yesterday)) return "Ontem";
-
-    return date.toLocaleDateString("pt-BR", {
-      day: "2-digit",
-      month: "long",
-      year: date.getFullYear() === today.getFullYear() ? undefined : "numeric"
-    });
-  }
-
-  function formatDuration(seconds) {
-    const min = Math.floor(seconds / 60);
-    const sec = seconds % 60;
-    return String(min).padStart(2, "0") + ":" + String(sec).padStart(2, "0");
-  }
-
-  function loadLocal() {
-    try {
-      return JSON.parse(localStorage.getItem(localKey)) || { user: null, contacts: [], messages: {} };
-    } catch {
-      return { user: null, contacts: [], messages: {} };
-    }
-  }
-
-  function saveLocal(data) {
-    localStorage.setItem(localKey, JSON.stringify(data));
-  }
-
-  function isPresenceOnline(userData) {
-    if (!userData) return false;
-    const lastActive = userData.lastActiveAt || userData.presenceUpdatedAt || 0;
-    return userData.online === true && Date.now() - lastActive < 120000;
-  }
-
-  function formatLastSeen(lastSeen) {
-    if (!lastSeen) return "offline";
-
-    const date = new Date(lastSeen);
-    const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-    const yesterday = today - 86400000;
-    const day = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
-    const time = date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
-
-    if (day === today) return "visto por último hoje às " + time;
-    if (day === yesterday) return "visto por último ontem às " + time;
-
-    return "visto por último em " + date.toLocaleDateString("pt-BR") + " às " + time;
-  }
-
-  function getChatStatusText() {
-    if (!activeChat) return "";
-    if (activeChatTyping) return "digitando...";
-    if (isPresenceOnline(activeChatPresence)) return "online";
-    if (activeChatPresence && activeChatPresence.lastSeen) return formatLastSeen(activeChatPresence.lastSeen);
-    return activeChat.phone || "";
-  }
-
-  function updateChatTopStatus() {
-    const phoneLine = document.getElementById("chatContactPhone");
-    if (!phoneLine || !activeChat) return;
-
-    const text = getChatStatusText();
-    phoneLine.innerText = text;
-    phoneLine.classList.toggle("typing", activeChatTyping);
-    phoneLine.classList.toggle("online", !activeChatTyping && isPresenceOnline(activeChatPresence));
-  }
-
-  async function setMyPresence(isOnline) {
-    if (!firebaseReady || !db || !currentUser) return;
-
-    const now = Date.now();
-    const payload = {
-      online: !!isOnline,
-      lastActiveAt: now,
-      presenceUpdatedAt: now,
-      updatedAt: now,
-      appVersion: "3.4"
-    };
-
-    if (!isOnline) payload.lastSeen = now;
-
-    try {
-      await db.collection("users").doc(currentUser.id).set(payload, { merge: true });
-    } catch (error) {
-      console.error("Erro ao atualizar presença:", error);
-    }
-  }
-
-  function startPresenceTracking() {
-    if (!firebaseReady || !db || !currentUser) return;
-
-    setMyPresence(true);
-
-    if (presenceHeartbeatTimer) clearInterval(presenceHeartbeatTimer);
-    presenceHeartbeatTimer = setInterval(() => {
-      if (!document.hidden && navigator.onLine !== false) setMyPresence(true);
-    }, 25000);
-
-    if (presenceListenersBound) return;
-    presenceListenersBound = true;
-
-    document.addEventListener("visibilitychange", () => {
-      if (!currentUser) return;
-      if (document.hidden) {
-        setTypingStatus(false);
-        setMyPresence(false);
-      } else {
-        setMyPresence(true);
-      }
-    });
-
-    window.addEventListener("pagehide", () => {
-      setTypingStatus(false);
-      setMyPresence(false);
-    });
-
-    window.addEventListener("focus", () => setMyPresence(true));
-    window.addEventListener("blur", () => {
-      setTypingStatus(false);
-      setMyPresence(false);
-    });
-  }
-
-  function stopActiveChatPresenceListener() {
-    if (activeChatPresenceUnsubscribe) {
-      activeChatPresenceUnsubscribe();
-      activeChatPresenceUnsubscribe = null;
-    }
-
-    activeChatPresence = null;
-    activeChatTyping = false;
-  }
-
-  function listenActiveChatPresence() {
-    if (!firebaseReady || !db || !currentUser || !activeChat) return;
-
-    stopActiveChatPresenceListener();
-
-    const otherId = activeChat.contactUserId || ("user_" + activeChat.phone);
-
-    activeChatPresenceUnsubscribe = db.collection("users")
-      .doc(otherId)
-      .onSnapshot(doc => {
-        if (!activeChat) return;
-
-        if (doc.exists) {
-          activeChatPresence = doc.data() || null;
-
-          const name = activeChat.name || activeChat.savedName || activeChatPresence?.name || "Contato";
-          const photo = activeChatPresence?.photoData || activeChatPresence?.photoUrl || activeChat.photoData || activeChat.photoUrl || "";
-          const avatar = document.getElementById("chatAvatar");
-          if (avatar) avatar.innerHTML = avatarInnerHtml(name, photo) + (isPresenceOnline(activeChatPresence) ? '<span class="presence-dot"></span>' : '');
-        } else {
-          activeChatPresence = null;
-        }
-
-        updateChatTopStatus();
-      }, error => {
-        console.error("Erro ouvindo presença:", error);
-      });
-  }
-
-  async function createProfile() {
-    const name = document.getElementById("regName").value.trim();
-    const phone = cleanPhone(document.getElementById("regPhone").value);
-    const email = document.getElementById("regEmail").value.trim();
-
-    if (!name) return alert("Digite seu nome.");
-    if (!phone || phone.length < 8) return alert("Digite um telefone válido.");
-
-    const user = {
-      id: "user_" + phone,
-      name,
-      phone,
-      email,
-      photoUrl: "",
-      photoData: "",
-      online: true,
-      lastSeen: null,
-      lastActiveAt: Date.now(),
-      presenceUpdatedAt: Date.now(),
-      appVersion: "3.4",
-      createdAt: Date.now(),
-      updatedAt: Date.now()
-    };
-
-    currentUser = user;
-
-    if (firebaseReady) {
-      await db.collection("users").doc(user.id).set(user, { merge: true });
-      localStorage.setItem("zappi_current_user", JSON.stringify(user));
-    } else {
-      const data = loadLocal();
-      data.user = user;
-      saveLocal(data);
-    }
-
-    showHome();
-  }
-
-  async function checkExistingProfile() {
-    const savedFirebaseUser = localStorage.getItem("zappi_current_user");
-
-    if (savedFirebaseUser) {
-      currentUser = JSON.parse(savedFirebaseUser);
-
-      if (firebaseReady) {
-        const userDoc = await db.collection("users").doc(currentUser.id).get();
-
-        if (userDoc.exists) {
-          currentUser = { ...currentUser, ...userDoc.data() };
-        }
-
-        await db.collection("users").doc(currentUser.id).set({
-          ...currentUser,
-          online: true,
-          lastActiveAt: Date.now(),
-          presenceUpdatedAt: Date.now(),
-          updatedAt: Date.now(),
-          appVersion: "3.4"
-        }, { merge: true });
-
-        localStorage.setItem("zappi_current_user", JSON.stringify(currentUser));
-      }
-
-      showHome();
-      return;
-    }
-
-    const data = loadLocal();
-    if (data.user) {
-      currentUser = data.user;
-      showHome();
-    }
-  }
-
-  function updateLocalCurrentUser() {
-    if (currentUser) localStorage.setItem("zappi_current_user", JSON.stringify(currentUser));
-  }
-
-  function showHome() {
-    document.getElementById("registerScreen").classList.remove("active");
-    document.getElementById("chatScreen").classList.remove("active");
-    document.getElementById("homeScreen").classList.add("active");
-    document.getElementById("topUserName").innerText = currentUser.name;
-    startPresenceTracking();
-    openTab("chats");
-
-    setTimeout(() => handleDeepLinkOpenChat(), 900);
-  }
-
-  async function handleDeepLinkOpenChat() {
-    if (deepLinkAlreadyHandled) return;
-    if (!pendingOpenChatUserId) return;
-    if (!firebaseReady || !db || !currentUser) return;
-
-    deepLinkAlreadyHandled = true;
-
-    try {
-      const sender = await getUserById(pendingOpenChatUserId);
-      if (!sender) return alert("Não foi possível abrir a conversa da notificação: usuário não encontrado.");
-
-      await loadContacts();
-
-      const savedContact = contacts.find(c => {
-        const cId = c.contactUserId || ("user_" + c.phone);
-        return cId === sender.id;
-      });
-
-      const contactToOpen = savedContact || {
-        name: sender.name || "Contato",
-        savedName: sender.name || "Contato",
-        phone: sender.phone || "",
-        contactUserId: sender.id,
-        photoUrl: sender.photoUrl || "",
-        photoData: sender.photoData || ""
-      };
-
-      openChat(contactToOpen);
-
-      const cleanUrl = window.location.origin + window.location.pathname;
-      window.history.replaceState({}, document.title, cleanUrl);
-    } catch (error) {
-      console.error("Erro ao abrir conversa pela notificação:", error);
-    }
-  }
-
-  function stopConversationListener() {
-    if (conversationsUnsubscribe) {
-      conversationsUnsubscribe();
-      conversationsUnsubscribe = null;
-    }
-  }
-
-  function stopTypingListener() {
-    if (typingUnsubscribe) {
-      typingUnsubscribe();
-      typingUnsubscribe = null;
-    }
-
-    clearTimeout(typingRevertTimeout);
-    typingRevertTimeout = null;
-  }
-
-  function openTab(tab) {
-    document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
-    const tabElements = document.querySelectorAll(".tab");
-
-    if (tab === "chats") tabElements[0].classList.add("active");
-    if (tab === "contacts") tabElements[1].classList.add("active");
-    if (tab === "profile") tabElements[2].classList.add("active");
-
-    if (tab === "chats") renderChats();
-
-    if (tab === "contacts") {
-      stopConversationListener();
-      renderContacts();
-    }
-
-    if (tab === "profile") {
-      stopConversationListener();
-      renderProfile();
-    }
-  }
-
-  async function loadContacts() {
-    if (firebaseReady) {
-      const snap = await db.collection("contacts")
-        .where("ownerId", "==", currentUser.id)
-        .get();
-
-      contacts = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
-      for (let i = 0; i < contacts.length; i++) {
+        for (let i = 0; i < contacts.length; i++) {
         const contact = contacts[i];
         const contactId = contact.contactUserId || ("user_" + contact.phone);
         const zappiUser = await getUserById(contactId);
@@ -1067,6 +647,7 @@
         contactUserId: zappiUser ? zappiUser.id : (userId || "user_" + clean),
         photoUrl: zappiUser ? zappiUser.photoUrl || "" : "",
         photoData: zappiUser ? zappiUser.photoData || "" : "",
+        statusText: zappiUser ? zappiUser.statusText || "" : "",
         createdAt: Date.now()
       });
     } else {
@@ -1085,6 +666,7 @@
           contactUserId: userId || "user_" + clean,
           photoUrl: "",
           photoData: "",
+          statusText: "",
           createdAt: Date.now()
         });
 
@@ -1132,6 +714,7 @@
         <div class="profile-info">
           <h3>${escapeHtml(currentUser.name)}</h3>
           <p>Seu contato Zappi: ${escapeHtml(currentUser.phone)}</p>
+          <span class="pill">${escapeHtml(currentUser.statusText || "Disponível no Zappi Web")}</span>
         </div>
       </div>
 
@@ -1178,7 +761,8 @@
       lastMessage: "Toque para conversar",
       timeText: "",
       unread: false,
-      hasFavorite: false
+      hasFavorite: false,
+      online: false
     }));
 
     renderConversationItems(lastConversationItems);
@@ -1205,6 +789,7 @@
 
     list.innerHTML = `<div class="list">${filtered.map(c => conversationItemHtml(c)).join("")}</div>`;
   }
+
   function listenConversations() {
     stopConversationListener();
     firstConversationSnapshot = true;
@@ -1240,10 +825,11 @@
             contactUserId: otherId,
             photoUrl: otherUser?.photoUrl || contact?.photoUrl || fallback.photoUrl || "",
             photoData: otherUser?.photoData || contact?.photoData || fallback.photoData || "",
+            statusText: otherUser?.statusText || contact?.statusText || fallback.statusText || "",
+            online: isPresenceOnline(otherUser),
             lastMessage: conv.lastMessage || "Toque para conversar",
             timeText: formatTime(conv.updatedAt),
             hasFavorite: conv.hasFavorite === true,
-            online: isPresenceOnline(otherUser),
             unread:
               conv.lastSenderId &&
               conv.lastSenderId !== currentUser.id &&
@@ -1286,6 +872,15 @@
           <span class="pill">Meu contato Zappi</span>
         </div>
       </div>
+
+      <div class="card">
+        <label>Status / recado</label>
+        <input id="myStatusInput" type="text" maxlength="120" value="${escapeAttr(currentUser.statusText || "Disponível no Zappi Web")}" placeholder="Ex: Disponível no Zappi Web" />
+        <button class="btn-primary" onclick="saveMyStatus()">Salvar status</button>
+        <p class="hint">Esse recado aparece nas informações do seu perfil para seus contatos.</p>
+      </div>
+
+      <br>
 
       <div class="card">
         <label>Foto de perfil</label>
@@ -1405,12 +1000,67 @@
         data["participantInfo." + currentUser.id + ".photoUrl"] = "";
         data["participantInfo." + currentUser.id + ".name"] = currentUser.name || "";
         data["participantInfo." + currentUser.id + ".phone"] = currentUser.phone || "";
+        data["participantInfo." + currentUser.id + ".statusText"] = currentUser.statusText || "Disponível no Zappi Web";
         batch.set(ref, data, { merge: true });
       });
 
       await batch.commit();
     } catch (error) {
       console.error("Erro ao atualizar foto nas conversas:", error);
+    }
+  }
+
+  async function saveMyStatus() {
+    if (!currentUser) return;
+
+    const input = document.getElementById("myStatusInput");
+    const statusText = String(input?.value || "").trim().slice(0, 120) || "Disponível no Zappi Web";
+
+    currentUser.statusText = statusText;
+    currentUser.updatedAt = Date.now();
+    updateLocalCurrentUser();
+
+    if (firebaseReady && db) {
+      try {
+        await db.collection("users").doc(currentUser.id).set({
+          statusText,
+          updatedAt: Date.now(),
+          appVersion: "3.7"
+        }, { merge: true });
+
+        await updateMyStatusInConversations(statusText);
+      } catch (error) {
+        console.error("Erro ao salvar status:", error);
+        return alert("Não foi possível salvar o status agora.");
+      }
+    }
+
+    alert("Status atualizado.");
+    renderProfile();
+  }
+
+  async function updateMyStatusInConversations(statusText) {
+    if (!firebaseReady || !db || !currentUser) return;
+
+    try {
+      const snap = await db.collection("conversations")
+        .where("participants", "array-contains", currentUser.id)
+        .get();
+
+      if (snap.empty) return;
+
+      const batch = db.batch();
+
+      snap.docs.forEach(doc => {
+        const ref = db.collection("conversations").doc(doc.id);
+        const data = {};
+        data["participantInfo." + currentUser.id + ".statusText"] = statusText || "";
+        batch.set(ref, data, { merge: true });
+      });
+
+      await batch.commit();
+    } catch (error) {
+      console.error("Erro ao atualizar status nas conversas:", error);
     }
   }
 
@@ -1421,6 +1071,96 @@
 
   function getConversationId(userA, userB) {
     return [userA, userB].sort().join("_");
+  }
+
+  function getActiveContactInfo() {
+    if (!activeChat) return null;
+
+    const name = activeChat.name || activeChat.savedName || activeChatPresence?.name || "Contato";
+    const phone = activeChat.phone || activeChatPresence?.phone || "";
+    const photo = activeChatPresence?.photoData || activeChatPresence?.photoUrl || activeChat.photoData || activeChat.photoUrl || "";
+    const statusText = activeChatPresence?.statusText || activeChat.statusText || "Sem status definido";
+
+    return { name, phone, photo, statusText };
+  }
+
+  function openContactInfo() {
+    if (!activeChat) return;
+
+    const overlay = document.getElementById("contactInfoOverlay");
+    const box = document.getElementById("contactInfoContent");
+    if (!overlay || !box) return;
+
+    const info = getActiveContactInfo();
+    const saved = isContactSaved(activeChat);
+    const onlineText = getChatStatusText() || info.phone || "";
+    const favoriteMessages = (currentMessagesCache || []).filter(m => {
+      const deletedFor = m.deletedFor || [];
+      const favoriteBy = m.favoriteBy || [];
+      return favoriteBy.includes(currentUser.id) && !deletedFor.includes(currentUser.id) && !m.deleted;
+    });
+
+    box.innerHTML = `
+      <div class="contact-info-profile">
+        ${avatarHtml(info.name, info.photo, "big")}
+        <h2>${escapeHtml(info.name)}</h2>
+        <div class="contact-info-status-line">${escapeHtml(onlineText)}</div>
+      </div>
+
+      <div class="contact-info-card">
+        <strong>Telefone</strong>
+        <span>${escapeHtml(info.phone || "Telefone não encontrado")}</span>
+      </div>
+
+      <div class="contact-info-card">
+        <strong>Status / recado</strong>
+        <span>${escapeHtml(info.statusText || "Sem status definido")}</span>
+      </div>
+
+      <div class="small-actions">
+        ${saved ? `<button class="btn-light" onclick="alert('Esse contato já está salvo.')">Contato salvo</button>` : `<button class="btn-primary" onclick="saveContactFromInfo()">Salvar contato</button>`}
+        <button class="btn-light" onclick="copyActiveContactPhone()">Copiar telefone</button>
+      </div>
+
+      <div class="contact-info-card">
+        <strong>Mensagens favoritas</strong>
+        <div class="favorite-list">
+          ${favoriteMessages.length ? favoriteMessages.map(m => `
+            <div class="favorite-item">
+              ${escapeHtml(getMessagePreview(m))}
+              <small>${escapeHtml(m.senderName || "Mensagem")} · ${escapeHtml(m.timeText || "")}</small>
+            </div>
+          `).join("") : `<span>Nenhuma mensagem favoritada nesta conversa.</span>`}
+        </div>
+      </div>
+    `;
+
+    overlay.classList.add("active");
+  }
+
+  function closeContactInfo() {
+    const overlay = document.getElementById("contactInfoOverlay");
+    if (overlay) overlay.classList.remove("active");
+  }
+
+  async function saveContactFromInfo() {
+    if (!activeChat) return;
+    await saveActiveChatAsContact();
+    openContactInfo();
+  }
+
+  async function copyActiveContactPhone() {
+    if (!activeChat) return;
+    const phone = activeChat.phone || activeChatPresence?.phone || "";
+    if (!phone) return alert("Telefone não encontrado.");
+
+    try {
+      await navigator.clipboard.writeText(phone);
+      alert("Telefone copiado.");
+    } catch (error) {
+      console.error("Erro ao copiar telefone:", error);
+      alert("Não foi possível copiar o telefone.");
+    }
   }
 
   async function openChat(contact) {
@@ -1470,6 +1210,7 @@
     stopActiveChatPresenceListener();
     cancelReply();
     cancelEdit();
+    closeContactInfo();
 
     if (activeMessagesUnsubscribe) {
       activeMessagesUnsubscribe();
@@ -1519,42 +1260,246 @@
       setTypingStatus(false);
     }
   }
-
-  function listenTypingStatus() {
+    function listenTypingStatus() {
     if (!firebaseReady || !db || !currentUser || !activeChat) return;
 
     stopTypingListener();
 
     const otherId = activeChat.contactUserId || ("user_" + activeChat.phone);
     const conversationId = getConversationId(currentUser.id, otherId);
+    const phoneLine = document.getElementById("chatContactPhone");
 
     typingUnsubscribe = db.collection("conversations")
       .doc(conversationId)
       .collection("typing")
       .doc(otherId)
       .onSnapshot(doc => {
-        if (!activeChat) return;
+        if (!activeChat || !phoneLine) return;
 
         clearTimeout(typingRevertTimeout);
-        activeChatTyping = false;
 
         if (doc.exists) {
           const data = doc.data() || {};
-          const fresh = Date.now() - (data.at || 0) < 4500;
+          const fresh = Date.now() - (data.at || 0) < 5000;
 
           if (data.typing && fresh) {
             activeChatTyping = true;
+            updateChatHeaderStatus();
+
             typingRevertTimeout = setTimeout(() => {
               activeChatTyping = false;
-              updateChatTopStatus();
+              updateChatHeaderStatus();
             }, 3500);
+
+            return;
           }
         }
 
-        updateChatTopStatus();
+        activeChatTyping = false;
+        updateChatHeaderStatus();
       }, error => {
         console.error("Erro ouvindo digitando:", error);
       });
+  }
+
+  function stopActiveChatPresenceListener() {
+    if (activeChatPresenceUnsubscribe) {
+      activeChatPresenceUnsubscribe();
+      activeChatPresenceUnsubscribe = null;
+    }
+
+    activeChatPresence = null;
+    activeChatTyping = false;
+  }
+
+  function listenActiveChatPresence() {
+    if (!firebaseReady || !db || !currentUser || !activeChat) return;
+
+    stopActiveChatPresenceListener();
+
+    const otherId = activeChat.contactUserId || ("user_" + activeChat.phone);
+    const phoneLine = document.getElementById("chatContactPhone");
+
+    activeChatPresenceUnsubscribe = db.collection("users")
+      .doc(otherId)
+      .onSnapshot(doc => {
+        if (!activeChat || !phoneLine) return;
+
+        if (doc.exists) {
+          const data = doc.data() || {};
+          activeChatPresence = data;
+
+          if (data.name) document.getElementById("chatContactName").innerText = activeChat.name || activeChat.savedName || data.name;
+          if (data.photoData || data.photoUrl) {
+            document.getElementById("chatAvatar").innerHTML = avatarInnerHtml(
+              activeChat.name || activeChat.savedName || data.name,
+              data.photoData || data.photoUrl || ""
+            );
+          }
+
+          activeChat.statusText = data.statusText || activeChat.statusText || "";
+          activeChat.photoData = data.photoData || activeChat.photoData || "";
+          activeChat.photoUrl = data.photoUrl || activeChat.photoUrl || "";
+        }
+
+        updateChatHeaderStatus();
+      }, error => {
+        console.error("Erro ouvindo presença:", error);
+      });
+  }
+
+  function isPresenceOnline(userData) {
+    if (!userData) return false;
+
+    const lastActive = userData.lastActiveAt || userData.lastSeen || 0;
+    const fresh = Date.now() - lastActive < 45000;
+
+    return userData.online === true && fresh;
+  }
+
+  function getLastSeenText(lastSeen) {
+    if (!lastSeen) return "";
+
+    const date = new Date(lastSeen);
+    const now = new Date();
+
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const yesterday = today - 86400000;
+    const targetDay = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+
+    const time = date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+
+    if (targetDay === today) return "visto por último hoje às " + time;
+    if (targetDay === yesterday) return "visto por último ontem às " + time;
+
+    return "visto por último em " + date.toLocaleDateString("pt-BR") + " às " + time;
+  }
+
+  function getChatStatusText() {
+    if (activeChatTyping) return "digitando...";
+
+    if (isPresenceOnline(activeChatPresence)) return "online";
+
+    const lastSeen = activeChatPresence?.lastSeen || activeChatPresence?.lastActiveAt || 0;
+    const lastSeenText = getLastSeenText(lastSeen);
+
+    return lastSeenText || activeChat?.phone || "";
+  }
+
+  function updateChatHeaderStatus() {
+    const phoneLine = document.getElementById("chatContactPhone");
+    const avatar = document.getElementById("chatAvatar");
+
+    if (!phoneLine || !activeChat) return;
+
+    const text = getChatStatusText();
+
+    phoneLine.innerText = text || activeChat.phone || "";
+    phoneLine.classList.remove("typing", "online");
+
+    if (activeChatTyping) {
+      phoneLine.classList.add("typing");
+    } else if (isPresenceOnline(activeChatPresence)) {
+      phoneLine.classList.add("online");
+    }
+
+    if (avatar) {
+      const hasDot = avatar.querySelector(".presence-dot");
+
+      if (isPresenceOnline(activeChatPresence)) {
+        if (!hasDot) {
+          const dot = document.createElement("span");
+          dot.className = "presence-dot";
+          avatar.appendChild(dot);
+        }
+      } else if (hasDot) {
+        hasDot.remove();
+      }
+    }
+
+    if (document.getElementById("contactInfoOverlay")?.classList.contains("active")) {
+      openContactInfo();
+    }
+  }
+
+  async function setMyPresence(isOnline) {
+    if (!firebaseReady || !db || !currentUser) return;
+
+    const now = Date.now();
+
+    try {
+      const payload = {
+        online: !!isOnline,
+        lastActiveAt: now,
+        updatedAt: now,
+        appVersion: "3.7"
+      };
+
+      if (!isOnline) payload.lastSeen = now;
+
+      if (isOnline && !currentUser.statusText) {
+        payload.statusText = "Disponível no Zappi Web";
+      }
+
+      await db.collection("users").doc(currentUser.id).set(payload, { merge: true });
+
+      if (isOnline) {
+        currentUser.online = true;
+        currentUser.lastActiveAt = now;
+      } else {
+        currentUser.online = false;
+        currentUser.lastSeen = now;
+      }
+
+      updateLocalCurrentUser();
+    } catch (error) {
+      console.error("Erro ao atualizar presença:", error);
+    }
+  }
+
+  function startPresenceHeartbeat() {
+    if (presenceHeartbeatTimer) clearInterval(presenceHeartbeatTimer);
+
+    setMyPresence(true);
+
+    presenceHeartbeatTimer = setInterval(() => {
+      if (!document.hidden && currentUser && firebaseReady) {
+        setMyPresence(true);
+      }
+    }, 25000);
+  }
+
+  function bindPresenceListeners() {
+    if (presenceListenersBound) return;
+
+    presenceListenersBound = true;
+
+    document.addEventListener("visibilitychange", () => {
+      if (!currentUser) return;
+
+      if (document.hidden) {
+        setTypingStatus(false);
+        setMyPresence(false);
+      } else {
+        setMyPresence(true);
+      }
+    });
+
+    window.addEventListener("focus", () => {
+      if (currentUser) setMyPresence(true);
+    });
+
+    window.addEventListener("blur", () => {
+      if (currentUser) setMyPresence(false);
+    });
+
+    window.addEventListener("pagehide", () => {
+      if (currentUser) setMyPresence(false);
+    });
+
+    window.addEventListener("beforeunload", () => {
+      if (currentUser) setMyPresence(false);
+    });
   }
 
   async function markConversationAsRead() {
@@ -1698,6 +1643,22 @@
     return `<span class="favorite-label">★ Favorita</span>`;
   }
 
+  function getMessageDateLabel(timestamp) {
+    if (!timestamp) return "";
+
+    const date = new Date(timestamp);
+    const now = new Date();
+
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const yesterday = today - 86400000;
+    const targetDay = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+
+    if (targetDay === today) return "Hoje";
+    if (targetDay === yesterday) return "Ontem";
+
+    return date.toLocaleDateString("pt-BR");
+  }
+
   function renderMessages(messages) {
     const chatBody = document.getElementById("chatBody");
 
@@ -1711,9 +1672,16 @@
       return;
     }
 
-    let lastDay = "";
+    let lastDateLabel = "";
 
     chatBody.innerHTML = visibleMessages.map(m => {
+      const dateLabel = getMessageDateLabel(m.createdAt);
+      const dateHtml = dateLabel && dateLabel !== lastDateLabel
+        ? `<div class="date-separator">${escapeHtml(dateLabel)}</div>`
+        : "";
+
+      if (dateLabel) lastDateLabel = dateLabel;
+
       const mine = m.senderId === currentUser.id;
       const status = getMessageStatusHtml(m, mine);
       const messageId = escapeAttr(m.id || "");
@@ -1721,9 +1689,6 @@
       const forwardedHtml = renderForwardedLabel(m);
       const editedHtml = renderEditedLabel(m);
       const favoriteHtml = renderFavoriteLabel(m);
-      const msgDay = dayKey(m.createdAt || m.timestamp || 0);
-      const dateHtml = msgDay !== lastDay ? `<div class="date-separator">${escapeHtml(formatDateSeparator(m.createdAt || m.timestamp || Date.now()))}</div>` : "";
-      lastDay = msgDay;
 
       if (m.deleted) {
         return `
@@ -1750,9 +1715,7 @@
             ${replyHtml}
             <img class="msg-img" src="${escapeAttr(img)}" onclick="openImageFull('${escapeAttr(img)}')" />
             ${m.text ? `<div class="msg-caption">${escapeHtml(m.text)}</div>` : ""}
-            <div class="msg-img-actions">
-              <button class="save-img-mini" onclick="event.stopPropagation();saveImageFromData('${messageId}')">Salvar foto</button>
-            </div>
+            <button class="save-photo-inline" onclick="event.stopPropagation();downloadImageData('${escapeAttr(img)}')">Salvar foto</button>
             <small>${m.timeText || ""}${editedHtml}${status}</small>
             <button class="msg-menu-btn" onclick="event.stopPropagation();openMessageMenu('${messageId}', ${mine})">⋮</button>
           </div>
@@ -1834,8 +1797,7 @@
       saveImageBtn.style.display =
         message &&
         !message.deleted &&
-        message.type === "image" &&
-        (message.imageData || message.imageUrl)
+        message.type === "image"
           ? "block"
           : "none";
     }
@@ -1875,40 +1837,45 @@
     }
   }
 
-  function base64Extension(imageData) {
-    const match = String(imageData || "").match(/^data:image\/(png|jpeg|jpg|webp|gif);/i);
-    if (!match) return "jpg";
-    return match[1].toLowerCase() === "jpeg" ? "jpg" : match[1].toLowerCase();
-  }
+  function saveSelectedImage() {
+    if (!selectedMessageId) return;
 
-  function saveImageFromData(messageId) {
-    const message = currentMessagesCache.find(m => m.id === messageId);
+    const message = currentMessagesCache.find(m => m.id === selectedMessageId);
 
     if (!message || message.deleted || message.type !== "image") {
-      return alert("Imagem não encontrada para salvar.");
+      closeMessageMenu();
+      return alert("Essa mensagem não possui imagem para salvar.");
     }
 
     const imageData = message.imageData || message.imageUrl || "";
-    if (!imageData) return alert("Imagem não encontrada para salvar.");
+    closeMessageMenu();
+    downloadImageData(imageData);
+  }
+
+  function downloadImageData(imageData) {
+    if (!imageData) return alert("Imagem não encontrada.");
 
     try {
       const link = document.createElement("a");
-      const ext = base64Extension(imageData);
       link.href = imageData;
-      link.download = "zappi-foto-" + Date.now() + "." + ext;
+      link.download = "zappi-foto-" + Date.now() + ".jpg";
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
     } catch (error) {
       console.error("Erro ao salvar imagem:", error);
-      alert("Não foi possível salvar automaticamente. Toque na foto, segure e escolha salvar imagem.");
-    }
-  }
 
-  function saveSelectedImage() {
-    if (!selectedMessageId) return;
-    saveImageFromData(selectedMessageId);
-    closeMessageMenu();
+      try {
+        const win = window.open();
+        if (win) {
+          win.document.write(`<img src="${escapeAttr(imageData)}" style="max-width:100%;height:auto;" />`);
+        } else {
+          alert("Não foi possível abrir a imagem. Verifique as permissões do navegador.");
+        }
+      } catch {
+        alert("Não foi possível salvar a imagem.");
+      }
+    }
   }
 
   async function toggleFavoriteSelectedMessage() {
@@ -1931,41 +1898,25 @@
         .collection("messages")
         .doc(selectedMessageId);
 
-      if (isFav) {
-        await ref.set({
-          favoriteBy: firebase.firestore.FieldValue.arrayRemove(currentUser.id)
-        }, { merge: true });
-      } else {
-        await ref.set({
-          favoriteBy: firebase.firestore.FieldValue.arrayUnion(currentUser.id)
-        }, { merge: true });
-      }
+      const updated = isFav
+        ? favoriteBy.filter(id => id !== currentUser.id)
+        : [...favoriteBy, currentUser.id];
 
-      await updateConversationFavoriteFlag(conversationId);
+      await ref.set({ favoriteBy: updated }, { merge: true });
+
+      const hasFavorite = currentMessagesCache.some(m => {
+        if (m.id === selectedMessageId) return updated.includes(currentUser.id);
+        return (m.favoriteBy || []).includes(currentUser.id);
+      });
+
+      await db.collection("conversations").doc(conversationId).set({
+        hasFavorite
+      }, { merge: true });
 
       closeMessageMenu();
     } catch (error) {
-      console.error("Erro ao favoritar:", error);
+      console.error("Erro ao favoritar mensagem:", error);
       alert("Não foi possível atualizar favorito.");
-    }
-  }
-
-  async function updateConversationFavoriteFlag(conversationId) {
-    if (!firebaseReady || !db || !currentUser) return;
-
-    try {
-      const favSnap = await db.collection("conversations")
-        .doc(conversationId)
-        .collection("messages")
-        .where("favoriteBy", "array-contains", currentUser.id)
-        .limit(1)
-        .get();
-
-      await db.collection("conversations").doc(conversationId).set({
-        hasFavorite: !favSnap.empty
-      }, { merge: true });
-    } catch (error) {
-      console.error("Erro ao atualizar flag de favoritos:", error);
     }
   }
 
@@ -1973,43 +1924,35 @@
     if (!selectedMessageId) return;
 
     const message = currentMessagesCache.find(m => m.id === selectedMessageId);
-
-    if (!message) {
+    if (!message || message.deleted) {
       closeMessageMenu();
-      return alert("Não foi possível localizar a mensagem.");
+      return alert("Não é possível responder essa mensagem.");
     }
-
-    cancelEdit();
 
     replyToMessage = {
       id: message.id,
-      senderId: message.senderId || "",
-      senderName: message.senderName || "Contato",
-      type: message.deleted ? "deleted" : (message.type || "text"),
-      preview: getMessagePreview(message)
+      senderId: message.senderId,
+      senderName: message.senderName || (message.senderId === currentUser.id ? currentUser.name : activeChat.name || "Contato"),
+      preview: getMessagePreview(message),
+      type: message.type || "text"
     };
 
-    document.getElementById("replyPreviewName").innerText = "Respondendo " + replyToMessage.senderName;
+    document.getElementById("replyPreviewName").innerText = replyToMessage.senderName;
     document.getElementById("replyPreviewText").innerText = replyToMessage.preview;
     document.getElementById("replyPreview").classList.add("active");
     document.getElementById("chatBody").classList.add("with-reply");
 
     closeMessageMenu();
-
-    setTimeout(() => {
-      const input = document.getElementById("messageInput");
-      if (input) input.focus();
-    }, 100);
+    document.getElementById("messageInput").focus();
   }
 
   function cancelReply() {
     replyToMessage = null;
-
     const preview = document.getElementById("replyPreview");
-    const chatBody = document.getElementById("chatBody");
+    const body = document.getElementById("chatBody");
 
     if (preview) preview.classList.remove("active");
-    if (chatBody) chatBody.classList.remove("with-reply");
+    if (body) body.classList.remove("with-reply");
   }
 
   function editSelectedMessage() {
@@ -2017,79 +1960,51 @@
 
     const message = currentMessagesCache.find(m => m.id === selectedMessageId);
 
-    if (!message) {
+    if (!message || message.deleted || message.type !== "text" || message.senderId !== currentUser.id) {
       closeMessageMenu();
-      return alert("Não foi possível localizar a mensagem.");
+      return alert("Só é possível editar mensagens de texto enviadas por você.");
     }
-
-    if (message.senderId !== currentUser.id) return alert("Você só pode editar mensagens que você enviou.");
-    if (message.deleted || message.type !== "text") return alert("Só é possível editar mensagens de texto.");
-
-    cancelReply();
 
     editingMessageId = message.id;
     editingOriginalText = message.text || "";
 
     const input = document.getElementById("messageInput");
-    const preview = document.getElementById("editPreview");
-    const chatBody = document.getElementById("chatBody");
-    const btn = document.getElementById("sendButton");
-    const text = document.getElementById("editPreviewText");
-
     input.value = editingOriginalText;
-    input.placeholder = "Editando mensagem...";
+    input.focus();
 
-    if (text) text.innerText = editingOriginalText;
-    if (preview) preview.classList.add("active");
-    if (chatBody) chatBody.classList.add("with-edit");
-    if (btn) {
-      btn.innerText = "✓";
-      btn.classList.add("editing");
-    }
+    document.getElementById("editPreviewText").innerText = editingOriginalText;
+    document.getElementById("editPreview").classList.add("active");
+    document.getElementById("chatBody").classList.add("with-edit");
+    document.getElementById("sendButton").classList.add("editing");
+    document.getElementById("sendButton").innerText = "✓";
 
     closeMessageMenu();
-
-    setTimeout(() => {
-      input.focus();
-      input.setSelectionRange(input.value.length, input.value.length);
-    }, 100);
   }
 
   function cancelEdit() {
     editingMessageId = "";
     editingOriginalText = "";
 
-    const input = document.getElementById("messageInput");
     const preview = document.getElementById("editPreview");
-    const chatBody = document.getElementById("chatBody");
+    const body = document.getElementById("chatBody");
     const btn = document.getElementById("sendButton");
 
-    if (input) input.placeholder = "Digite uma mensagem...";
     if (preview) preview.classList.remove("active");
-    if (chatBody) chatBody.classList.remove("with-edit");
+    if (body) body.classList.remove("with-edit");
     if (btn) {
-      btn.innerText = "➤";
       btn.classList.remove("editing");
+      btn.innerText = "➤";
     }
+
+    const input = document.getElementById("messageInput");
+    if (input) input.value = "";
   }
 
-  async function saveEditedMessage() {
-    const input = document.getElementById("messageInput");
-    const newText = input.value.trim();
+  async function updateEditedMessage(newText) {
+    if (!editingMessageId || !activeChat || !firebaseReady || !db) return false;
 
-    if (!editingMessageId || !activeChat) return;
-    if (!newText) return alert("A mensagem editada não pode ficar vazia.");
-
-    const message = currentMessagesCache.find(m => m.id === editingMessageId);
-    if (!message) return alert("Mensagem não encontrada.");
-
-    if (newText === editingOriginalText) {
-      input.value = "";
-      cancelEdit();
-      return;
-    }
-
-    if (!firebaseReady || !db) return alert("Firebase ainda não está conectado.");
+    const text = String(newText || "").trim();
+    if (!text) return alert("A mensagem editada não pode ficar vazia.");
 
     const otherId = activeChat.contactUserId || ("user_" + activeChat.phone);
     const conversationId = getConversationId(currentUser.id, otherId);
@@ -2100,7 +2015,7 @@
         .collection("messages")
         .doc(editingMessageId)
         .set({
-          text: newText,
+          text,
           edited: true,
           editedAt: Date.now()
         }, { merge: true });
@@ -2109,260 +2024,89 @@
 
       if (lastMessage && lastMessage.id === editingMessageId) {
         await db.collection("conversations").doc(conversationId).set({
-          lastMessage: newText,
+          lastMessage: text,
           updatedAt: Date.now()
         }, { merge: true });
       }
 
-      input.value = "";
-      await setTypingStatus(false);
       cancelEdit();
-      playMessageSound();
+      return true;
     } catch (error) {
       console.error("Erro ao editar mensagem:", error);
       alert("Não foi possível editar a mensagem.");
+      return false;
     }
-  }
-
-  async function openForwardPicker() {
-    if (!selectedMessageId) return;
-
-    const message = currentMessagesCache.find(m => m.id === selectedMessageId);
-
-    if (!message) {
-      closeMessageMenu();
-      return alert("Não foi possível localizar a mensagem.");
-    }
-
-    if (message.deleted || message.type === "deleted") {
-      closeMessageMenu();
-      return alert("Não é possível encaminhar mensagem apagada.");
-    }
-
-    forwardMessageData = {
-      id: message.id,
-      text: message.text || "",
-      type: message.type || "text",
-      imageData: message.imageData || "",
-      imageUrl: message.imageUrl || "",
-      audioData: message.audioData || "",
-      audioMime: message.audioMime || "",
-      audioDuration: message.audioDuration || 0,
-      fileName: message.fileName || "",
-      originalSenderName: message.senderName || ""
-    };
-
-    closeMessageMenu();
-    await loadContacts();
-
-    const list = document.getElementById("forwardList");
-
-    if (!contacts.length) {
-      list.innerHTML = `<div class="empty">Nenhum contato salvo para encaminhar.</div>`;
-    } else {
-      list.innerHTML = contacts.map(c => {
-        const name = c.name || c.savedName || "Contato";
-        const phone = c.phone || "";
-        const photo = c.photoData || c.photoUrl || "";
-
-        return `
-          <div class="forward-contact" onclick="sendForwardToContact('${safeJson(c)}')">
-            ${avatarHtml(name, photo, "small")}
-            <div class="contact-main">
-              <h4>${escapeHtml(name)}</h4>
-              <p>${escapeHtml(phone)}</p>
-            </div>
-          </div>
-        `;
-      }).join("");
-    }
-
-    document.getElementById("forwardOverlay").classList.add("active");
-  }
-
-  function closeForwardPicker() {
-    document.getElementById("forwardOverlay").classList.remove("active");
-    forwardMessageData = null;
-    isForwarding = false;
-  }
-
-  async function sendForwardToContact(encodedContact) {
-    if (isForwarding) return;
-    if (!forwardMessageData) return;
-
-    const contact = JSON.parse(decodeURIComponent(encodedContact));
-    const ok = confirm("Encaminhar mensagem para " + (contact.name || contact.savedName || "Contato") + "?");
-
-    if (!ok) return;
-
-    isForwarding = true;
-
-    try {
-      await createForwardedMessage(contact, forwardMessageData);
-      closeForwardPicker();
-      alert("Mensagem encaminhada.");
-    } catch (error) {
-      console.error("Erro ao encaminhar:", error);
-      alert("Não foi possível encaminhar a mensagem.");
-      isForwarding = false;
-    }
-  }
-
-  async function createForwardedMessage(contact, source) {
-    if (!currentUser || !firebaseReady || !db) throw new Error("Firebase não conectado.");
-
-    const otherId = contact.contactUserId || ("user_" + contact.phone);
-    const conversationId = getConversationId(currentUser.id, otherId);
-    const otherUser = await getUserById(otherId);
-
-    let messageText = source.text || "";
-
-    if (source.type === "image") messageText = "📷 Imagem";
-    if (source.type === "audio") messageText = "🎤 Áudio";
-
-    const message = {
-      conversationId,
-      senderId: currentUser.id,
-      senderName: currentUser.name,
-      receiverId: otherId,
-      text: source.text || "",
-      type: source.type || "text",
-      imageData: source.imageData || "",
-      imageUrl: source.imageUrl || "",
-      audioData: source.audioData || "",
-      audioMime: source.audioMime || "",
-      audioDuration: source.audioDuration || 0,
-      fileName: source.fileName || "",
-      forwarded: true,
-      forwardedFrom: source.originalSenderName || "",
-      replyTo: null,
-      edited: false,
-      favoriteBy: [],
-      deleted: false,
-      deletedFor: [],
-      createdAt: Date.now(),
-      timeText: nowText(),
-      deliveredAt: null,
-      readAt: null,
-      read: false
-    };
-
-    const convRef = db.collection("conversations").doc(conversationId);
-
-    const participantInfo = {};
-
-    participantInfo[currentUser.id] = {
-      name: currentUser.name,
-      phone: currentUser.phone,
-      photoUrl: currentUser.photoUrl || "",
-      photoData: currentUser.photoData || ""
-    };
-
-    participantInfo[otherId] = {
-      name: otherUser?.name || contact.name || contact.savedName || "Contato",
-      phone: otherUser?.phone || contact.phone || "",
-      photoUrl: otherUser?.photoUrl || contact.photoUrl || "",
-      photoData: otherUser?.photoData || contact.photoData || ""
-    };
-
-    const readBy = {};
-    readBy[currentUser.id] = Date.now();
-
-    await convRef.set({
-      id: conversationId,
-      participants: [currentUser.id, otherId],
-      participantInfo,
-      lastMessage: "↪ " + messageText,
-      lastSenderId: currentUser.id,
-      updatedAt: Date.now(),
-      readBy
-    }, { merge: true });
-
-    const messageRef = await convRef.collection("messages").add(message);
-
-    setTimeout(async () => {
-      try {
-        await messageRef.set({ deliveredAt: Date.now() }, { merge: true });
-      } catch (error) {
-        console.error("Erro ao marcar encaminhada como entregue:", error);
-      }
-    }, 600);
-
-    await sendPushNotificationToUser(
-      otherId,
-      source.type === "image" ? "↪ Encaminhou uma imagem" :
-      source.type === "audio" ? "↪ Encaminhou um áudio" :
-      "↪ " + (source.text || "Mensagem encaminhada")
-    );
   }
 
   async function deleteMessageForMe() {
-    if (!selectedMessageId || !activeChat || !firebaseReady || !db) return;
+    if (!selectedMessageId || !activeChat) return;
 
-    const ok = confirm("Apagar esta mensagem só para você?");
-    if (!ok) return;
+    const otherId = activeChat.contactUserId || ("user_" + activeChat.phone);
+    const conversationId = getConversationId(currentUser.id, otherId);
+
+    if (firebaseReady) {
+      try {
+        const ref = db.collection("conversations")
+          .doc(conversationId)
+          .collection("messages")
+          .doc(selectedMessageId);
+
+        const message = currentMessagesCache.find(m => m.id === selectedMessageId);
+        const deletedFor = message?.deletedFor || [];
+
+        if (!deletedFor.includes(currentUser.id)) deletedFor.push(currentUser.id);
+
+        await ref.set({ deletedFor }, { merge: true });
+      } catch (error) {
+        console.error("Erro ao apagar só para mim:", error);
+        alert("Não foi possível apagar a mensagem.");
+      }
+    }
+
+    closeMessageMenu();
+  }
+
+  async function deleteMessageForAll() {
+    if (!selectedMessageId || !activeChat || !selectedMessageMine) return;
+
+    if (!confirm("Apagar esta mensagem para todos?")) return;
 
     const otherId = activeChat.contactUserId || ("user_" + activeChat.phone);
     const conversationId = getConversationId(currentUser.id, otherId);
 
     try {
+      const now = Date.now();
+
       await db.collection("conversations")
         .doc(conversationId)
         .collection("messages")
         .doc(selectedMessageId)
         .set({
-          deletedFor: firebase.firestore.FieldValue.arrayUnion(currentUser.id)
+          deleted: true,
+          text: "",
+          imageData: "",
+          imageUrl: "",
+          audioData: "",
+          type: "deleted",
+          deletedAt: now
         }, { merge: true });
 
-      closeMessageMenu();
+      const lastMessage = currentMessagesCache[currentMessagesCache.length - 1];
+
+      if (lastMessage && lastMessage.id === selectedMessageId) {
+        await db.collection("conversations").doc(conversationId).set({
+          lastMessage: "Mensagem apagada",
+          updatedAt: now
+        }, { merge: true });
+      }
     } catch (error) {
-      console.error("Erro ao apagar só para mim:", error);
-      alert("Não foi possível apagar a mensagem.");
+      console.error("Erro ao apagar para todos:", error);
+      alert("Não foi possível apagar para todos.");
     }
+
+    closeMessageMenu();
   }
-
-  async function deleteMessageForAll() {
-    if (!selectedMessageId || !activeChat || !firebaseReady || !db) return;
-
-    if (!selectedMessageMine) {
-      alert("Você só pode apagar para todos as mensagens que você enviou.");
-      return;
-    }
-
-    const ok = confirm("Apagar esta mensagem para todos?");
-    if (!ok) return;
-
-    const otherId = activeChat.contactUserId || ("user_" + activeChat.phone);
-    const conversationId = getConversationId(currentUser.id, otherId);
-
-    try {
-      const messageRef = db.collection("conversations")
-        .doc(conversationId)
-        .collection("messages")
-        .doc(selectedMessageId);
-
-      await messageRef.set({
-        deleted: true,
-        deletedAt: Date.now(),
-        deletedBy: currentUser.id,
-        text: "",
-        imageData: "",
-        imageUrl: "",
-        audioData: "",
-        audioMime: "",
-        audioDuration: 0,
-        fileName: "",
-        type: "deleted"
-      }, { merge: true });
-
-      await db.collection("conversations").doc(conversationId).set({
-        lastMessage: "Mensagem apagada",
-        lastSenderId: currentUser.id,
-        updatedAt: Date.now()
-      }, { merge: true });
-
-      closeMessageMenu();
-    } catch (error) {
+      } catch (error) {
       console.error("Erro ao apagar para todos:", error);
       alert("Não foi possível apagar para todos.");
     }
@@ -2697,23 +2441,19 @@
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
 
-      reader.onload = function(event) {
+      reader.onload = event => {
         const img = new Image();
 
-        img.onload = function() {
+        img.onload = () => {
           let width = img.width;
           let height = img.height;
 
-          if (width > height) {
-            if (width > maxSize) {
-              height = Math.round(height * maxSize / width);
-              width = maxSize;
-            }
-          } else {
-            if (height > maxSize) {
-              width = Math.round(width * maxSize / height);
-              height = maxSize;
-            }
+          if (width > height && width > maxSize) {
+            height = Math.round(height * (maxSize / width));
+            width = maxSize;
+          } else if (height > maxSize) {
+            width = Math.round(width * (maxSize / height));
+            height = maxSize;
           }
 
           const canvas = document.createElement("canvas");
@@ -2721,57 +2461,17 @@
           canvas.height = height;
 
           const ctx = canvas.getContext("2d");
-          ctx.fillStyle = "#fff";
-          ctx.fillRect(0, 0, width, height);
           ctx.drawImage(img, 0, 0, width, height);
 
-          let output = canvas.toDataURL("image/jpeg", quality);
-
-          if (output.length > 820000) output = canvas.toDataURL("image/jpeg", 0.42);
-
-          if (output.length > 820000) {
-            const smallerCanvas = document.createElement("canvas");
-            const smallerMax = 560;
-            let sw = img.width;
-            let sh = img.height;
-
-            if (sw > sh) {
-              if (sw > smallerMax) {
-                sh = Math.round(sh * smallerMax / sw);
-                sw = smallerMax;
-              }
-            } else {
-              if (sh > smallerMax) {
-                sw = Math.round(sw * smallerMax / sh);
-                sh = smallerMax;
-              }
-            }
-
-            smallerCanvas.width = sw;
-            smallerCanvas.height = sh;
-
-            const sctx = smallerCanvas.getContext("2d");
-            sctx.fillStyle = "#fff";
-            sctx.fillRect(0, 0, sw, sh);
-            sctx.drawImage(img, 0, 0, sw, sh);
-
-            output = smallerCanvas.toDataURL("image/jpeg", 0.38);
-          }
-
-          resolve(output);
+          const dataUrl = canvas.toDataURL("image/jpeg", quality);
+          resolve(dataUrl);
         };
 
-        img.onerror = function() {
-          reject(new Error("Não foi possível ler a imagem."));
-        };
-
+        img.onerror = () => reject(new Error("Não foi possível carregar a imagem."));
         img.src = event.target.result;
       };
 
-      reader.onerror = function() {
-        reject(new Error("Não foi possível abrir o arquivo."));
-      };
-
+      reader.onerror = () => reject(new Error("Não foi possível ler o arquivo."));
       reader.readAsDataURL(file);
     });
   }
@@ -2780,132 +2480,238 @@
     const chatBody = document.getElementById("chatBody");
     if (!chatBody) return;
 
-    removeTempUploadMessage();
+    tempUploadId = "temp_" + Date.now();
 
-    tempUploadId = "temp_upload_" + Date.now();
+    const div = document.createElement("div");
+    div.id = tempUploadId;
+    div.className = "msg me uploading";
+    div.innerText = text || "Enviando...";
 
-    const temp = document.createElement("div");
-    temp.id = tempUploadId;
-    temp.className = "msg me uploading";
-    temp.innerHTML = `${escapeHtml(text)}<small>${nowText()}</small>`;
-
-    chatBody.appendChild(temp);
+    chatBody.appendChild(div);
     scrollChatToBottom();
   }
 
   function removeTempUploadMessage() {
     if (!tempUploadId) return;
 
-    const temp = document.getElementById(tempUploadId);
-
-    if (temp) temp.remove();
+    const el = document.getElementById(tempUploadId);
+    if (el) el.remove();
 
     tempUploadId = "";
   }
 
-  async function createMessage({ type, text, imageData, audioData, audioMime, audioDuration, fileName }) {
-    if (!activeChat) return;
+  async function saveEditedMessage() {
+    if (!editingMessageId || !activeChat || !firebaseReady || !db) return;
 
-    await setTypingStatus(false);
+    const input = document.getElementById("messageInput");
+    const newText = input.value.trim();
+
+    if (!newText) return alert("Digite o novo texto da mensagem.");
 
     const otherId = activeChat.contactUserId || ("user_" + activeChat.phone);
     const conversationId = getConversationId(currentUser.id, otherId);
-    const otherUser = firebaseReady ? await getUserById(otherId) : null;
 
-    let messageText = text;
+    try {
+      await db.collection("conversations")
+        .doc(conversationId)
+        .collection("messages")
+        .doc(editingMessageId)
+        .set({
+          text: newText,
+          edited: true,
+          editedAt: Date.now()
+        }, { merge: true });
 
-    if (type === "image") messageText = "📷 Imagem";
-    if (type === "audio") messageText = "🎤 Áudio";
+      const msg = currentMessagesCache.find(m => m.id === editingMessageId);
+      const isLast = currentMessagesCache.length && currentMessagesCache[currentMessagesCache.length - 1].id === editingMessageId;
 
-    const replyTo = replyToMessage ? { ...replyToMessage } : null;
+      if (isLast && msg) {
+        await db.collection("conversations").doc(conversationId).set({
+          lastMessage: newText,
+          updatedAt: Date.now()
+        }, { merge: true });
+      }
 
-    const message = {
-      conversationId,
+      input.value = "";
+      cancelEdit();
+      playMessageSound();
+    } catch (error) {
+      console.error("Erro ao editar mensagem:", error);
+      alert("Não foi possível editar a mensagem.");
+    }
+  }
+
+  async function createMessage(payload) {
+    if (!activeChat || !currentUser) return;
+
+    const otherId = activeChat.contactUserId || ("user_" + activeChat.phone);
+    const conversationId = getConversationId(currentUser.id, otherId);
+
+    const otherUser = await getUserById(otherId);
+
+    const type = payload.type || "text";
+    const text = payload.text || "";
+    const imageData = payload.imageData || "";
+    const audioData = payload.audioData || "";
+    const audioMime = payload.audioMime || "";
+    const audioDuration = payload.audioDuration || 0;
+    const fileName = payload.fileName || "";
+
+    let lastMessageText = text || "Mensagem";
+
+    if (type === "image") lastMessageText = "📷 Imagem";
+    if (type === "audio") lastMessageText = "🎤 Áudio";
+
+    const now = Date.now();
+
+    const messageData = {
       senderId: currentUser.id,
       senderName: currentUser.name,
       receiverId: otherId,
-      text: text || "",
-      type: type || "text",
-      imageData: imageData || "",
-      audioData: audioData || "",
-      audioMime: audioMime || "",
-      audioDuration: audioDuration || 0,
-      fileName: fileName || "",
-      replyTo,
-      forwarded: false,
-      forwardedFrom: "",
-      edited: false,
-      editedAt: null,
-      favoriteBy: [],
-      deleted: false,
-      deletedFor: [],
-      createdAt: Date.now(),
+      text,
+      type,
+      imageData,
+      imageUrl: "",
+      audioData,
+      audioMime,
+      audioDuration,
+      fileName,
+      createdAt: now,
       timeText: nowText(),
       deliveredAt: null,
       readAt: null,
-      read: false
+      read: false,
+      deleted: false,
+      deletedFor: [],
+      replyTo: replyToMessage,
+      forwarded: isForwarding,
+      favoriteBy: [],
+      edited: false
     };
 
-    if (firebaseReady) {
-      const convRef = db.collection("conversations").doc(conversationId);
+    if (firebaseReady && db) {
+      const conversationRef = db.collection("conversations").doc(conversationId);
 
       const participantInfo = {};
-
       participantInfo[currentUser.id] = {
-        name: currentUser.name,
-        phone: currentUser.phone,
+        name: currentUser.name || "",
+        phone: currentUser.phone || "",
         photoUrl: currentUser.photoUrl || "",
-        photoData: currentUser.photoData || ""
+        photoData: currentUser.photoData || "",
+        statusText: currentUser.statusText || "Disponível no Zappi Web"
       };
 
       participantInfo[otherId] = {
         name: otherUser?.name || activeChat.name || activeChat.savedName || "Contato",
         phone: otherUser?.phone || activeChat.phone || "",
         photoUrl: otherUser?.photoUrl || activeChat.photoUrl || "",
-        photoData: otherUser?.photoData || activeChat.photoData || ""
+        photoData: otherUser?.photoData || activeChat.photoData || "",
+        statusText: otherUser?.statusText || activeChat.statusText || ""
       };
 
-      const readBy = {};
-      readBy[currentUser.id] = Date.now();
-
-      await convRef.set({
+      await conversationRef.set({
         id: conversationId,
         participants: [currentUser.id, otherId],
         participantInfo,
-        lastMessage: messageText,
+        lastMessage: lastMessageText,
         lastSenderId: currentUser.id,
-        updatedAt: Date.now(),
-        readBy
+        updatedAt: now
       }, { merge: true });
 
-      const messageRef = await convRef.collection("messages").add(message);
+      const newMessageRef = await conversationRef.collection("messages").add(messageData);
+
+      await newMessageRef.set({ id: newMessageRef.id }, { merge: true });
+
+      await sendPushNotificationToUser(otherId, lastMessageText);
 
       setTimeout(async () => {
         try {
-          await messageRef.set({ deliveredAt: Date.now() }, { merge: true });
+          await newMessageRef.set({
+            deliveredAt: Date.now()
+          }, { merge: true });
         } catch (error) {
-          console.error("Erro ao marcar como entregue:", error);
+          console.error("Erro ao marcar entregue:", error);
         }
       }, 600);
-
-      await sendPushNotificationToUser(
-        otherId,
-        type === "image" ? "📷 Enviou uma imagem" :
-        type === "audio" ? "🎤 Enviou um áudio" :
-        text
-      );
     } else {
       const data = loadLocal();
-
+      if (!data.messages) data.messages = {};
       if (!data.messages[conversationId]) data.messages[conversationId] = [];
 
-      message.id = "local_" + Date.now();
-      data.messages[conversationId].push(message);
+      messageData.id = "local_" + now;
+      data.messages[conversationId].push(messageData);
       saveLocal(data);
-      listenMessages();
+      currentMessagesCache = data.messages[conversationId];
+      renderMessages(currentMessagesCache);
+    }
+  }
+
+  function openForwardPicker() {
+    if (!selectedMessageId) return;
+
+    const message = currentMessagesCache.find(m => m.id === selectedMessageId);
+
+    if (!message || message.deleted) {
+      closeMessageMenu();
+      return alert("Não é possível encaminhar essa mensagem.");
     }
 
-    scrollChatToBottom();
+    forwardMessageData = { ...message };
+    closeMessageMenu();
+
+    const list = document.getElementById("forwardList");
+
+    if (!contacts.length) {
+      list.innerHTML = `<div class="empty">Você ainda não tem contatos salvos.</div>`;
+    } else {
+      list.innerHTML = contacts.map(c => `
+        <div class="forward-contact" onclick="forwardSelectedMessage('${safeJson(c)}')">
+          ${avatarHtml(c.name || c.savedName || "Contato", c.photoData || c.photoUrl || "")}
+          <div>
+            <h4>${escapeHtml(c.name || c.savedName || "Contato")}</h4>
+            <p>${escapeHtml(c.phone || "")}</p>
+          </div>
+        </div>
+      `).join("");
+    }
+
+    document.getElementById("forwardOverlay").classList.add("active");
+  }
+
+  function closeForwardPicker() {
+    document.getElementById("forwardOverlay").classList.remove("active");
+    forwardMessageData = null;
+  }
+
+  async function forwardSelectedMessage(encodedContact) {
+    if (!forwardMessageData) return;
+
+    const originalActiveChat = activeChat;
+    const contact = JSON.parse(decodeURIComponent(encodedContact));
+
+    try {
+      activeChat = contact;
+      isForwarding = true;
+
+      await createMessage({
+        type: forwardMessageData.type || "text",
+        text: forwardMessageData.text || "",
+        imageData: forwardMessageData.imageData || "",
+        audioData: forwardMessageData.audioData || "",
+        audioMime: forwardMessageData.audioMime || "",
+        audioDuration: forwardMessageData.audioDuration || 0,
+        fileName: forwardMessageData.fileName || ""
+      });
+
+      alert("Mensagem encaminhada.");
+    } catch (error) {
+      console.error("Erro ao encaminhar:", error);
+      alert("Não foi possível encaminhar a mensagem.");
+    } finally {
+      activeChat = originalActiveChat;
+      isForwarding = false;
+      closeForwardPicker();
+    }
   }
 
   function handleMessageKey(event) {
@@ -3109,7 +2915,7 @@
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", async () => {
       try {
-        await navigator.serviceWorker.register("sw.js?v=183");
+        await navigator.serviceWorker.register("sw.js?v=184");
       } catch (error) {
         console.error(error);
       }
