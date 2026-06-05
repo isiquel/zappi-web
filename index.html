@@ -123,6 +123,11 @@
     .call-avatar img{width:100%;height:100%;object-fit:cover}
     .call-actions{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;width:100%}
     .call-actions button{min-width:118px}
+    .call-audio-controls{width:100%;display:none;gap:8px;align-items:center;justify-content:center;flex-wrap:wrap;background:#f4f7f6;border:1px solid #e0e8e5;border-radius:18px;padding:10px}
+    .call-audio-controls.active{display:flex}
+    .call-audio-controls button{height:38px;border-radius:999px;padding:0 14px;background:#eaf3f1;color:#075E54;font-size:12px;font-weight:900}
+    .call-audio-controls input{width:120px;accent-color:#128C7E}
+    .call-volume-label{font-size:12px;color:#666;font-weight:800}
     .btn-call-end{background:#e53935;color:#fff}
     .btn-call-accept{background:#128C7E;color:#fff}
     .chat-save-bar{display:none;height:44px;background:#fff8df;color:#5b4300;padding:8px 12px;border-bottom:1px solid #f0d98b;align-items:center;justify-content:space-between;gap:10px;font-size:12px;position:absolute;top:72px;left:0;right:0;z-index:19}
@@ -421,6 +426,11 @@
       <h2 id="callTitle">Ligação de áudio</h2>
       <p id="callSubtitle">Preparando chamada...</p>
       <audio id="remoteCallAudio" autoplay playsinline></audio>
+      <div id="callAudioControls" class="call-audio-controls">
+        <button id="callOutputBtn" onclick="toggleCallAudioOutput()">🔈 Baixo</button>
+        <span class="call-volume-label">Volume</span>
+        <input id="callVolumeRange" type="range" min="0.05" max="1" step="0.05" value="0.25" oninput="setCallVolumeFromSlider(this.value)" />
+      </div>
       <div id="callActions" class="call-actions"></div>
     </div>
   </div>
@@ -505,6 +515,9 @@
   let addedRemoteCandidates = {};
   let remoteDescriptionApplied = false;
   let callRingtoneTimer = null;
+  let callAudioMode = localStorage.getItem("zappi_call_audio_mode") || "low";
+  let callAudioVolume = Number(localStorage.getItem("zappi_call_audio_volume") || "0.25");
+  if (!Number.isFinite(callAudioVolume) || callAudioVolume <= 0) callAudioVolume = 0.25;
 
   let mediaRecorder = null;
   let audioChunks = [];
@@ -2251,6 +2264,59 @@
     return activeChatPresence?.photoData || activeChatPresence?.photoUrl || activeChat?.photoData || activeChat?.photoUrl || "";
   }
 
+  function clampCallVolume(value) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return 0.25;
+    return Math.max(0.05, Math.min(1, n));
+  }
+
+  function applyCallAudioSettings() {
+    const audio = document.getElementById("remoteCallAudio");
+    const controls = document.getElementById("callAudioControls");
+    const btn = document.getElementById("callOutputBtn");
+    const range = document.getElementById("callVolumeRange");
+
+    callAudioVolume = clampCallVolume(callAudioVolume);
+    if (audio) {
+      audio.volume = callAudioVolume;
+      audio.muted = false;
+    }
+    if (range) range.value = String(callAudioVolume);
+    if (btn) {
+      btn.innerText = callAudioMode === "low" ? "🔈 Baixo" : "🔊 Alto";
+      btn.title = callAudioMode === "low" ? "Modo baixo para ouvir mais perto do ouvido" : "Modo alto-falante";
+    }
+    if (controls && currentCallId) controls.classList.add("active");
+  }
+
+  function setCallVolumeFromSlider(value) {
+    callAudioVolume = clampCallVolume(value);
+    localStorage.setItem("zappi_call_audio_volume", String(callAudioVolume));
+    if (callAudioVolume <= 0.35) callAudioMode = "low";
+    if (callAudioVolume >= 0.75) callAudioMode = "speaker";
+    localStorage.setItem("zappi_call_audio_mode", callAudioMode);
+    applyCallAudioSettings();
+  }
+
+  function toggleCallAudioOutput() {
+    if (callAudioMode === "low") {
+      callAudioMode = "speaker";
+      callAudioVolume = 1;
+    } else {
+      callAudioMode = "low";
+      callAudioVolume = 0.25;
+    }
+    localStorage.setItem("zappi_call_audio_mode", callAudioMode);
+    localStorage.setItem("zappi_call_audio_volume", String(callAudioVolume));
+    applyCallAudioSettings();
+
+    if (callAudioMode === "low") {
+      showToast("Modo baixo ativado. Aproxime o celular do ouvido e ajuste o volume físico.", "info");
+    } else {
+      showToast("Alto-falante ativado.", "info");
+    }
+  }
+
   function setCallOverlay({ mode, title, subtitle, showAccept = false, showDecline = false, showEnd = true }) {
     const overlay = document.getElementById("callOverlay");
     const avatar = document.getElementById("callAvatar");
@@ -2271,11 +2337,14 @@
     if (showEnd) buttons.push(`<button class="btn-call-end" onclick="endCurrentAudioCall()">Encerrar</button>`);
     actions.innerHTML = buttons.join("");
     overlay.classList.add("active");
+    applyCallAudioSettings();
   }
 
   function hideCallOverlay() {
     const overlay = document.getElementById("callOverlay");
     if (overlay) overlay.classList.remove("active");
+    const controls = document.getElementById("callAudioControls");
+    if (controls) controls.classList.remove("active");
   }
 
   async function ensureLocalCallStream() {
@@ -2299,6 +2368,7 @@
       const audio = document.getElementById("remoteCallAudio");
       if (audio && event.streams && event.streams[0]) {
         audio.srcObject = event.streams[0];
+        applyCallAudioSettings();
         audio.play().catch(() => {});
       }
     };
