@@ -211,6 +211,9 @@
     .status-viewer-box{width:100%;max-width:440px;max-height:90vh;overflow-y:auto;background:#fff;border-radius:24px 24px 18px 18px;box-shadow:0 -10px 30px rgba(0,0,0,.25);padding:16px;display:flex;flex-direction:column;gap:12px}
     .status-viewer-top{display:flex;align-items:center;justify-content:space-between;gap:12px}
     .status-viewer-top h3{font-size:17px;color:#075E54}
+    .status-auto-close{height:4px;background:#e8f1ef;border-radius:999px;overflow:hidden}
+    .status-auto-close span{display:block;height:100%;width:100%;background:#25D366;border-radius:999px;animation:statusBar 5s linear forwards}
+    @keyframes statusBar{from{width:100%}to{width:0%}}
     .status-entry{background:#f7fbfa;border:1px solid #e1efec;border-radius:18px;padding:12px;display:flex;flex-direction:column;gap:10px}
     .status-entry-head{display:flex;align-items:center;gap:10px}
     .status-entry-time{font-size:11px;color:#777}
@@ -402,6 +405,7 @@
         <h3 id="statusViewerTitle">Status</h3>
         <button class="contact-info-close" onclick="closeStatusViewer()">×</button>
       </div>
+      <div class="status-auto-close"><span id="statusAutoCloseBar"></span></div>
       <div id="statusViewerContent"></div>
     </div>
   </div>
@@ -462,6 +466,7 @@
   let statusFeedCache = [];
   let activeStatusMap = {};
   let currentStatusOwnerId = "";
+  let statusViewerTimer = null;
 
   let mediaRecorder = null;
   let audioChunks = [];
@@ -519,7 +524,7 @@
     if (!("serviceWorker" in navigator)) return null;
 
     try {
-      const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js?v=188", { scope: "/" });
+      const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js?v=189", { scope: "/" });
       await navigator.serviceWorker.ready;
       if (registration && registration.update) registration.update();
       return registration;
@@ -887,6 +892,24 @@
     `;
   }
 
+  function startStatusViewerAutoClose() {
+    clearTimeout(statusViewerTimer);
+    const bar = document.getElementById("statusAutoCloseBar");
+    if (bar) {
+      bar.style.animation = "none";
+      bar.offsetHeight;
+      bar.style.animation = "statusBar 5s linear forwards";
+    }
+    statusViewerTimer = setTimeout(() => {
+      closeStatusViewer();
+    }, 5000);
+  }
+
+  function stopStatusViewerAutoClose() {
+    clearTimeout(statusViewerTimer);
+    statusViewerTimer = null;
+  }
+
   function openStatusViewer(ownerId) {
     currentStatusOwnerId = ownerId;
     const items = statusFeedCache.filter(s => s.ownerId === ownerId).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
@@ -900,6 +923,7 @@
       title.innerText = "Status";
       content.innerHTML = `<div class="status-empty">Nenhum status ativo.</div>`;
       overlay.classList.add("active");
+      startStatusViewerAutoClose();
       return;
     }
 
@@ -920,9 +944,11 @@
     `).join("");
 
     overlay.classList.add("active");
+    startStatusViewerAutoClose();
   }
 
   function closeStatusViewer() {
+    stopStatusViewerAutoClose();
     const overlay = document.getElementById("statusViewerOverlay");
     if (overlay) overlay.classList.remove("active");
     currentStatusOwnerId = "";
@@ -3673,7 +3699,7 @@
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", async () => {
       try {
-        await navigator.serviceWorker.register("sw.js?v=188");
+        await navigator.serviceWorker.register("sw.js?v=189");
       } catch (error) {
         console.error(error);
       }
