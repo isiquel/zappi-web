@@ -12,6 +12,7 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.4/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.4/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.4/firebase-storage-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.4/firebase-messaging-compat.js"></script>
 
   <style>
@@ -66,6 +67,7 @@
     .small-actions button{font-size:13px;padding:10px 12px}
     .pill{display:inline-block;background:#e8f6f3;color:#075E54;padding:6px 9px;border-radius:999px;font-size:12px;font-weight:800;margin-top:6px}
     .install-box{background:#fff8df;border:1px solid #ffe39c;color:#5b4300;padding:14px;border-radius:16px;font-size:13px;line-height:1.4;margin-bottom:14px;display:none}
+
     #chatScreen.active{display:block;height:var(--app-height);min-height:var(--app-height);overflow:hidden;background:#efeae2}
     .chat-head{height:72px;background:#075E54;color:white;padding:12px;display:flex;align-items:center;gap:10px;position:absolute;top:0;left:0;right:0;z-index:20}
     .back{width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.14);display:flex;align-items:center;justify-content:center;font-size:22px;cursor:pointer;flex-shrink:0}
@@ -81,9 +83,16 @@
     .msg.me{align-self:flex-end;background:#d9fdd3;border-bottom-right-radius:4px}
     .msg.other{align-self:flex-start;background:white;border-bottom-left-radius:4px}
     .msg small{display:block;text-align:right;font-size:10px;opacity:.55;margin-top:4px}
+    .msg-img-wrap{padding:4px;background:transparent}
+    .msg-img{display:block;max-width:230px;max-height:260px;border-radius:12px;object-fit:cover;cursor:pointer}
+    .msg-caption{font-size:13px;margin-top:6px}
+    .uploading{opacity:.75;font-style:italic}
     .chat-input{height:76px;background:#f0f2f5;padding:10px 10px calc(10px + env(safe-area-inset-bottom));display:flex;gap:8px;align-items:center;border-top:1px solid rgba(0,0,0,.08);position:absolute;bottom:0;left:0;right:0;z-index:25}
-    .chat-input input{border-radius:22px;padding:13px 15px;font-size:16px}
+    .chat-input input[type="text"]{border-radius:22px;padding:13px 15px;font-size:16px}
+    .attach-btn{width:44px;height:44px;border-radius:50%;background:#fff;color:#075E54;font-size:21px;flex-shrink:0;display:flex;align-items:center;justify-content:center;border:1px solid #d7d7d7;padding:0}
     .send-btn{width:48px;height:48px;border-radius:50%;background:#128C7E;color:white;font-size:18px;flex-shrink:0;display:flex;align-items:center;justify-content:center}
+    .hidden-file{display:none}
+
     .in-app-toast{position:absolute;top:14px;left:14px;right:14px;z-index:9999;background:#075E54;color:white;padding:13px 14px;border-radius:16px;box-shadow:0 10px 25px rgba(0,0,0,.25);display:none;align-items:center;gap:10px;cursor:pointer;animation:slideDown .25s ease-out}
     .in-app-toast.active{display:flex}
     .toast-avatar{width:38px;height:38px;border-radius:50%;background:#128C7E;display:flex;align-items:center;justify-content:center;font-weight:900;flex-shrink:0}
@@ -132,7 +141,7 @@
       </div>
 
       <div class="notice">
-        Versão 2.0: notificação abre direto a conversa de quem enviou a mensagem.
+        Versão 2.2: envio de imagem/foto no chat usando Firebase Storage.
       </div>
     </div>
   </div>
@@ -173,6 +182,8 @@
     <div class="chat-body" id="chatBody"></div>
 
     <div class="chat-input">
+      <input id="imageInput" class="hidden-file" type="file" accept="image/*" onchange="handleImageSelected(event)" />
+      <button class="attach-btn" onclick="document.getElementById('imageInput').click()">📷</button>
       <input id="messageInput" type="text" placeholder="Digite uma mensagem..." onkeydown="handleMessageKey(event)" />
       <button class="send-btn" onclick="sendMessage()">➤</button>
     </div>
@@ -194,6 +205,7 @@
   let firebaseReady = false;
   let db = null;
   let auth = null;
+  let storage = null;
   let messaging = null;
   let currentUser = null;
   let contacts = [];
@@ -209,6 +221,7 @@
   let firstMessagesSnapshot = true;
   let pendingOpenChatUserId = null;
   let deepLinkAlreadyHandled = false;
+  let isUploadingImage = false;
 
   const localKey = "zappi_web_v1_data";
 
@@ -229,8 +242,50 @@
   function readDeepLink() {
     const params = new URLSearchParams(window.location.search);
     const chat = params.get("chat");
-    if (chat) {
-      pendingOpenChatUserId = chat;
+    if (chat) pendingOpenChatUserId = chat;
+  }
+
+  function receiveNotificationCommand() {
+    if (!("serviceWorker" in navigator)) return;
+
+    navigator.serviceWorker.addEventListener("message", (event) => {
+      const data = event.data || {};
+
+      if (data.type === "ZAPPI_OPEN_URL" && data.url) {
+        try {
+          const url = new URL(data.url);
+          const chat = url.searchParams.get("chat");
+
+          if (chat) {
+            pendingOpenChatUserId = chat;
+            deepLinkAlreadyHandled = false;
+            handleDeepLinkOpenChat();
+          }
+        } catch (error) {
+          console.error("Erro ao receber comando da notificação:", error);
+        }
+      }
+    });
+  }
+
+  async function forceRegisterFirebaseMessagingSW() {
+    if (!("serviceWorker" in navigator)) return null;
+
+    try {
+      const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js?v=72", {
+        scope: "/"
+      });
+
+      await navigator.serviceWorker.ready;
+
+      if (registration && registration.update) {
+        registration.update();
+      }
+
+      return registration;
+    } catch (error) {
+      console.error("Erro ao registrar firebase-messaging-sw:", error);
+      return null;
     }
   }
 
@@ -239,6 +294,8 @@
       firebase.initializeApp(firebaseConfig);
       auth = firebase.auth();
       db = firebase.firestore();
+      storage = firebase.storage();
+
       await auth.signInAnonymously();
 
       try {
@@ -772,7 +829,7 @@
         </div>
 
         <p class="hint">
-          Se o celular bloquear, libere as notificações nas permissões do site e tente novamente.
+          As notificações já chegam no celular. Se o toque nelas não abrir o app, continuamos usando como aviso sonoro/visual.
         </p>
       </div>
 
@@ -878,7 +935,7 @@
             ) {
               playIncomingAlert({
                 name: newest.senderName || activeChat.name || "Contato",
-                lastMessage: newest.text || "Nova mensagem",
+                lastMessage: newest.type === "image" ? "📷 Imagem recebida" : (newest.text || "Nova mensagem"),
                 contactUserId: newest.senderId,
                 phone: activeChat.phone || ""
               });
@@ -910,6 +967,16 @@
     chatBody.innerHTML = messages.map(m => {
       const mine = m.senderId === currentUser.id;
 
+      if (m.type === "image") {
+        return `
+          <div class="msg ${mine ? "me" : "other"} msg-img-wrap">
+            <img class="msg-img" src="${escapeHtml(m.imageUrl || "")}" onclick="openImageFull('${escapeHtml(m.imageUrl || "")}')" />
+            ${m.text ? `<div class="msg-caption">${escapeHtml(m.text)}</div>` : ""}
+            <small>${m.timeText || ""}</small>
+          </div>
+        `;
+      }
+
       return `
         <div class="msg ${mine ? "me" : "other"}">
           ${escapeHtml(m.text || "")}
@@ -919,6 +986,11 @@
     }).join("");
 
     scrollChatToBottom();
+  }
+
+  function openImageFull(url) {
+    if (!url) return;
+    window.open(url, "_blank");
   }
 
   function scrollChatToBottom() {
@@ -973,18 +1045,111 @@
     if (!text || !activeChat) return;
 
     input.value = "";
+    await createMessage({
+      type: "text",
+      text,
+      imageUrl: ""
+    });
+
+    playMessageSound();
+    scrollChatToBottom();
+  }
+
+  async function handleImageSelected(event) {
+    const file = event.target.files && event.target.files[0];
+    event.target.value = "";
+
+    if (!file) return;
+    if (!activeChat) return alert("Abra uma conversa primeiro.");
+
+    if (!firebaseReady || !storage) {
+      alert("O Firebase Storage ainda não está conectado.");
+      return;
+    }
+
+    if (!file.type.startsWith("image/")) {
+      alert("Escolha apenas imagem ou foto.");
+      return;
+    }
+
+    const maxSize = 8 * 1024 * 1024;
+
+    if (file.size > maxSize) {
+      alert("Imagem muito grande. Escolha uma foto de até 8 MB.");
+      return;
+    }
+
+    if (isUploadingImage) {
+      alert("Aguarde o envio da imagem anterior terminar.");
+      return;
+    }
+
+    isUploadingImage = true;
+    showUploadingMessage();
+
+    try {
+      const otherId = activeChat.contactUserId || ("user_" + activeChat.phone);
+      const conversationId = getConversationId(currentUser.id, otherId);
+      const extension = (file.name.split(".").pop() || "jpg").toLowerCase();
+      const safeName = "img_" + Date.now() + "_" + Math.random().toString(36).slice(2) + "." + extension;
+      const path = "chat_images/" + conversationId + "/" + safeName;
+
+      const ref = storage.ref().child(path);
+
+      await ref.put(file, {
+        contentType: file.type
+      });
+
+      const imageUrl = await ref.getDownloadURL();
+
+      await createMessage({
+        type: "image",
+        text: "",
+        imageUrl,
+        storagePath: path,
+        fileName: file.name
+      });
+
+      playMessageSound();
+
+    } catch (error) {
+      console.error("Erro ao enviar imagem:", error);
+      alert("Não foi possível enviar a imagem. Verifique as regras do Firebase Storage.");
+    } finally {
+      isUploadingImage = false;
+    }
+  }
+
+  function showUploadingMessage() {
+    const chatBody = document.getElementById("chatBody");
+
+    const temp = document.createElement("div");
+    temp.className = "msg me uploading";
+    temp.innerHTML = `Enviando imagem...<small>${nowText()}</small>`;
+
+    chatBody.appendChild(temp);
+    scrollChatToBottom();
+  }
+
+  async function createMessage({ type, text, imageUrl, storagePath, fileName }) {
+    if (!activeChat) return;
 
     const otherId = activeChat.contactUserId || ("user_" + activeChat.phone);
     const conversationId = getConversationId(currentUser.id, otherId);
     const otherUser = firebaseReady ? await getUserById(otherId) : null;
+
+    const messageText = type === "image" ? "📷 Imagem" : text;
 
     const message = {
       conversationId,
       senderId: currentUser.id,
       senderName: currentUser.name,
       receiverId: otherId,
-      text,
-      type: "text",
+      text: text || "",
+      type: type || "text",
+      imageUrl: imageUrl || "",
+      storagePath: storagePath || "",
+      fileName: fileName || "",
       createdAt: Date.now(),
       timeText: nowText(),
       read: false
@@ -1014,14 +1179,18 @@
         id: conversationId,
         participants: [currentUser.id, otherId],
         participantInfo,
-        lastMessage: text,
+        lastMessage: messageText,
         lastSenderId: currentUser.id,
         updatedAt: Date.now(),
         readBy
       }, { merge: true });
 
       await convRef.collection("messages").add(message);
-      await sendPushNotificationToUser(otherId, text);
+
+      await sendPushNotificationToUser(
+        otherId,
+        type === "image" ? "📷 Enviou uma imagem" : text
+      );
 
     } else {
       const data = loadLocal();
@@ -1035,7 +1204,6 @@
       listenMessages();
     }
 
-    playMessageSound();
     scrollChatToBottom();
   }
 
@@ -1105,7 +1273,7 @@
         body: contact.lastMessage || "Você recebeu uma nova mensagem.",
         icon: "/icon-192.png",
         badge: "/icon-192.png",
-        tag: "zappi-message",
+        tag: "zappi-message-local",
         data: {
           url: "/?chat=" + encodeURIComponent(contact.contactUserId || "")
         }
@@ -1144,11 +1312,12 @@
         return;
       }
 
-      const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js?v=24", {
-        scope: "/"
-      });
+      const registration = await forceRegisterFirebaseMessagingSW();
 
-      await navigator.serviceWorker.ready;
+      if (!registration) {
+        alert("Não foi possível registrar o service worker de notificações.");
+        return;
+      }
 
       const token = await messaging.getToken({
         vapidKey: vapidKey,
@@ -1243,8 +1412,14 @@
   }
 
   if ("serviceWorker" in navigator) {
-    window.addEventListener("load", () => {
-      navigator.serviceWorker.register("sw.js").catch(console.error);
+    window.addEventListener("load", async () => {
+      try {
+        await navigator.serviceWorker.register("sw.js?v=72");
+      } catch (error) {
+        console.error(error);
+      }
+
+      await forceRegisterFirebaseMessagingSW();
     });
   }
 
@@ -1274,6 +1449,7 @@
 
   (async function start() {
     readDeepLink();
+    receiveNotificationCommand();
     setAppHeight();
     await initFirebase();
     await checkExistingProfile();
