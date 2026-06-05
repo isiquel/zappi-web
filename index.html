@@ -82,6 +82,7 @@
     .chat-save-bar button{padding:8px 10px;font-size:12px;border-radius:10px;background:#075E54;color:white;white-space:nowrap}
     .chat-body{position:absolute;left:0;right:0;top:72px;bottom:76px;padding:14px;overflow-y:auto;background:#efeae2;display:flex;flex-direction:column;gap:8px;-webkit-overflow-scrolling:touch}
     .chat-body.with-save{top:116px}
+    .chat-body.with-reply{bottom:132px}
     .msg{max-width:78%;padding:10px 12px;border-radius:14px;font-size:14px;line-height:1.35;box-shadow:0 1px 2px rgba(0,0,0,.12);word-wrap:break-word;flex-shrink:0;position:relative}
     .msg.me{align-self:flex-end;background:#d9fdd3;border-bottom-right-radius:4px}
     .msg.other{align-self:flex-start;background:white;border-bottom-left-radius:4px}
@@ -99,6 +100,17 @@
     .deleted-msg{font-style:italic;color:#777}
     .msg-menu-btn{position:absolute;right:5px;bottom:3px;width:24px;height:24px;border-radius:50%;background:rgba(0,0,0,.06);color:#333;padding:0;font-size:16px;display:flex;align-items:center;justify-content:center}
     .msg.me .msg-menu-btn{background:rgba(0,0,0,.08)}
+
+    .reply-box{border-left:4px solid #128C7E;background:rgba(7,94,84,.08);border-radius:10px;padding:7px 9px;margin-bottom:7px;font-size:12px;color:#333;max-width:100%;overflow:hidden}
+    .reply-box strong{display:block;color:#075E54;font-size:12px;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .reply-box span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:.85}
+    .reply-preview{position:absolute;left:0;right:0;bottom:76px;background:#f7fbfa;border-top:1px solid #d8e7e3;padding:8px 10px;display:none;align-items:center;gap:8px;z-index:24}
+    .reply-preview.active{display:flex}
+    .reply-preview-content{flex:1;border-left:4px solid #128C7E;background:#fff;border-radius:10px;padding:7px 9px;min-width:0}
+    .reply-preview-content strong{font-size:12px;color:#075E54;display:block;margin-bottom:2px}
+    .reply-preview-content span{font-size:12px;color:#555;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .reply-preview button{width:34px;height:34px;border-radius:50%;padding:0;background:#e7eeee;color:#333;font-size:20px;flex-shrink:0}
+
     .msg-menu-overlay{position:absolute;inset:0;background:rgba(0,0,0,.35);z-index:99998;display:none;align-items:flex-end;justify-content:center;padding:14px}
     .msg-menu-overlay.active{display:flex}
     .msg-menu-box{width:100%;max-width:440px;background:white;border-radius:22px 22px 18px 18px;padding:14px;box-shadow:0 -8px 30px rgba(0,0,0,.25);display:flex;flex-direction:column;gap:10px}
@@ -145,6 +157,7 @@
   <div id="messageMenu" class="msg-menu-overlay" onclick="closeMessageMenu()">
     <div class="msg-menu-box" onclick="event.stopPropagation()">
       <h3>Opções da mensagem</h3>
+      <button class="btn-primary" onclick="replySelectedMessage()">Responder</button>
       <button class="btn-light" onclick="deleteMessageForMe()">Apagar só para mim</button>
       <button id="deleteForAllBtn" class="btn-danger" onclick="deleteMessageForAll()">Apagar para todos</button>
       <button class="cancel" onclick="closeMessageMenu()">Cancelar</button>
@@ -186,7 +199,7 @@
       </div>
 
       <div class="notice">
-        Versão 2.9: agora é possível apagar mensagem só para mim ou para todos.
+        Versão 3.0: agora é possível responder mensagem específica.
       </div>
     </div>
   </div>
@@ -237,6 +250,14 @@
 
     <div class="chat-body" id="chatBody"></div>
 
+    <div id="replyPreview" class="reply-preview">
+      <div class="reply-preview-content">
+        <strong id="replyPreviewName">Respondendo</strong>
+        <span id="replyPreviewText">Mensagem</span>
+      </div>
+      <button onclick="cancelReply()">×</button>
+    </div>
+
     <div class="chat-input">
       <input id="imageInput" class="hidden-file" type="file" accept="image/*" onchange="handleImageSelected(event)" />
       <button class="attach-btn" onclick="document.getElementById('imageInput').click()">📷</button>
@@ -285,6 +306,8 @@
   let tempUploadId = "";
   let selectedMessageId = "";
   let selectedMessageMine = false;
+  let currentMessagesCache = [];
+  let replyToMessage = null;
 
   let mediaRecorder = null;
   let audioChunks = [];
@@ -342,7 +365,7 @@
     if (!("serviceWorker" in navigator)) return null;
 
     try {
-      const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js?v=140", { scope: "/" });
+      const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js?v=150", { scope: "/" });
       await navigator.serviceWorker.ready;
       if (registration && registration.update) registration.update();
       return registration;
@@ -1069,6 +1092,7 @@
     activeChat = contact;
     lastActiveMessageId = "";
     firstMessagesSnapshot = true;
+    cancelReply();
 
     stopConversationListener();
     stopTypingListener();
@@ -1102,6 +1126,7 @@
 
     await setTypingStatus(false);
     stopTypingListener();
+    cancelReply();
 
     if (activeMessagesUnsubscribe) {
       activeMessagesUnsubscribe();
@@ -1249,6 +1274,7 @@
         .orderBy("createdAt", "asc")
         .onSnapshot(snapshot => {
           const messages = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          currentMessagesCache = messages;
 
           if (messages.length) {
             const newest = messages[messages.length - 1];
@@ -1285,6 +1311,7 @@
     } else {
       const data = loadLocal();
       const messages = data.messages[conversationId] || [];
+      currentMessagesCache = messages;
       removeTempUploadMessage();
       renderMessages(messages);
     }
@@ -1295,6 +1322,28 @@
     if (message.readAt) return `<span class="msg-status read">✓✓</span>`;
     if (message.deliveredAt) return `<span class="msg-status">✓✓</span>`;
     return `<span class="msg-status">✓</span>`;
+  }
+
+  function getMessagePreview(message) {
+    if (!message) return "Mensagem";
+
+    if (message.deleted) return "Mensagem apagada";
+    if (message.type === "image") return "📷 Imagem";
+    if (message.type === "audio") return "🎤 Áudio";
+    if (message.type === "deleted") return "Mensagem apagada";
+
+    return message.text || "Mensagem";
+  }
+
+  function renderReplyBox(replyTo) {
+    if (!replyTo) return "";
+
+    return `
+      <div class="reply-box">
+        <strong>${escapeHtml(replyTo.senderName || "Mensagem")}</strong>
+        <span>${escapeHtml(replyTo.preview || "Mensagem")}</span>
+      </div>
+    `;
   }
 
   function renderMessages(messages) {
@@ -1314,10 +1363,12 @@
       const mine = m.senderId === currentUser.id;
       const status = getMessageStatusHtml(m, mine);
       const messageId = escapeAttr(m.id || "");
+      const replyHtml = renderReplyBox(m.replyTo);
 
       if (m.deleted) {
         return `
           <div class="msg ${mine ? "me" : "other"} deleted-msg">
+            ${replyHtml}
             Mensagem apagada
             <small>${m.timeText || ""}${status}</small>
             <button class="msg-menu-btn" onclick="event.stopPropagation();openMessageMenu('${messageId}', ${mine})">⋮</button>
@@ -1330,6 +1381,7 @@
 
         return `
           <div class="msg ${mine ? "me" : "other"} msg-img-wrap">
+            ${replyHtml}
             <img class="msg-img" src="${escapeAttr(img)}" onclick="openImageFull('${escapeAttr(img)}')" />
             ${m.text ? `<div class="msg-caption">${escapeHtml(m.text)}</div>` : ""}
             <small>${m.timeText || ""}${status}</small>
@@ -1344,6 +1396,7 @@
 
         return `
           <div class="msg ${mine ? "me" : "other"} audio-msg">
+            ${replyHtml}
             <div class="audio-row">
               <span>🎤</span>
               <audio controls preload="metadata" src="${escapeAttr(audio)}" type="${escapeAttr(mime)}"></audio>
@@ -1356,6 +1409,7 @@
 
       return `
         <div class="msg ${mine ? "me" : "other"}">
+          ${replyHtml}
           ${escapeHtml(m.text || "")}
           <small>${m.timeText || ""}${status}</small>
           <button class="msg-menu-btn" onclick="event.stopPropagation();openMessageMenu('${messageId}', ${mine})">⋮</button>
@@ -1385,6 +1439,47 @@
     document.getElementById("messageMenu").classList.remove("active");
     selectedMessageId = "";
     selectedMessageMine = false;
+  }
+
+  function replySelectedMessage() {
+    if (!selectedMessageId) return;
+
+    const message = currentMessagesCache.find(m => m.id === selectedMessageId);
+
+    if (!message) {
+      closeMessageMenu();
+      return alert("Não foi possível localizar a mensagem.");
+    }
+
+    replyToMessage = {
+      id: message.id,
+      senderId: message.senderId || "",
+      senderName: message.senderName || "Contato",
+      type: message.deleted ? "deleted" : (message.type || "text"),
+      preview: getMessagePreview(message)
+    };
+
+    document.getElementById("replyPreviewName").innerText = "Respondendo " + replyToMessage.senderName;
+    document.getElementById("replyPreviewText").innerText = replyToMessage.preview;
+    document.getElementById("replyPreview").classList.add("active");
+    document.getElementById("chatBody").classList.add("with-reply");
+
+    closeMessageMenu();
+
+    setTimeout(() => {
+      const input = document.getElementById("messageInput");
+      if (input) input.focus();
+    }, 100);
+  }
+
+  function cancelReply() {
+    replyToMessage = null;
+
+    const preview = document.getElementById("replyPreview");
+    const chatBody = document.getElementById("chatBody");
+
+    if (preview) preview.classList.remove("active");
+    if (chatBody) chatBody.classList.remove("with-reply");
   }
 
   async function deleteMessageForMe() {
@@ -1523,6 +1618,7 @@
       audioData: ""
     });
 
+    cancelReply();
     playMessageSound();
     scrollChatToBottom();
   }
@@ -1571,6 +1667,7 @@
         audioData: ""
       });
 
+      cancelReply();
       playMessageSound();
     } catch (error) {
       console.error("Erro ao enviar imagem:", error);
@@ -1705,6 +1802,7 @@
         fileName: "audio_" + Date.now() + ".webm"
       });
 
+      cancelReply();
       playMessageSound();
     } catch (error) {
       console.error("Erro ao enviar áudio:", error);
@@ -1873,6 +1971,8 @@
     if (type === "image") messageText = "📷 Imagem";
     if (type === "audio") messageText = "🎤 Áudio";
 
+    const replyTo = replyToMessage ? { ...replyToMessage } : null;
+
     const message = {
       conversationId,
       senderId: currentUser.id,
@@ -1885,6 +1985,7 @@
       audioMime: audioMime || "",
       audioDuration: audioDuration || 0,
       fileName: fileName || "",
+      replyTo,
       deleted: false,
       deletedFor: [],
       createdAt: Date.now(),
@@ -2154,7 +2255,7 @@
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", async () => {
       try {
-        await navigator.serviceWorker.register("sw.js?v=140");
+        await navigator.serviceWorker.register("sw.js?v=150");
       } catch (error) {
         console.error(error);
       }
