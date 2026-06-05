@@ -604,7 +604,7 @@
     if (!("serviceWorker" in navigator)) return null;
 
     try {
-      const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js?v=200", { scope: "/" });
+      const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js?v=201", { scope: "/" });
       await navigator.serviceWorker.ready;
       if (registration && registration.update) registration.update();
       return registration;
@@ -879,7 +879,7 @@
         storyStatuses: nextStatuses,
         lastStoryAt: item.createdAt,
         updatedAt: Date.now(),
-        appVersion: "4.1.1"
+        appVersion: "4.1.3"
       }, { merge: true });
 
       currentUser.storyStatuses = nextStatuses;
@@ -1295,7 +1295,7 @@
           storyStatuses: fresh,
           lastStoryAt: fresh[0]?.createdAt || 0,
           updatedAt: Date.now(),
-          appVersion: "4.1.1"
+          appVersion: "4.1.3"
         }, { merge: true });
 
         currentUser.storyStatuses = fresh;
@@ -1362,7 +1362,7 @@
       lastActiveAt: now,
       presenceUpdatedAt: now,
       updatedAt: now,
-      appVersion: "4.1.1"
+      appVersion: "4.1.3"
     };
 
     if (!isOnline) payload.lastSeen = now;
@@ -1472,7 +1472,7 @@
       lastSeen: null,
       lastActiveAt: Date.now(),
       presenceUpdatedAt: Date.now(),
-      appVersion: "4.1.1",
+      appVersion: "4.1.3",
       createdAt: Date.now(),
       updatedAt: Date.now()
     };
@@ -1512,7 +1512,7 @@
           lastActiveAt: Date.now(),
           presenceUpdatedAt: Date.now(),
           updatedAt: Date.now(),
-          appVersion: "4.1.1"
+          appVersion: "4.1.3"
         }, { merge: true });
 
         localStorage.setItem("zappi_current_user", JSON.stringify(currentUser));
@@ -2215,7 +2215,7 @@
         await db.collection("users").doc(currentUser.id).set({
           statusText,
           updatedAt: Date.now(),
-          appVersion: "4.1.1"
+          appVersion: "4.1.3"
         }, { merge: true });
 
         await updateMyStatusInConversations(statusText);
@@ -2428,41 +2428,35 @@
     updateCallMediaButtons();
   }
 
-  async function getVideoStreamForFacingMode(facingMode) {
-    try {
-      return await navigator.mediaDevices.getUserMedia({
-        audio: false,
-        video: { facingMode: { exact: facingMode }, width: { ideal: 640 }, height: { ideal: 480 } }
-      });
-    } catch (exactError) {
-      return await navigator.mediaDevices.getUserMedia({
-        audio: false,
-        video: { facingMode: { ideal: facingMode }, width: { ideal: 640 }, height: { ideal: 480 } }
-      });
+  async function getCameraStreamByFacing(facingMode) {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      throw new Error("Câmera não disponível neste navegador.");
     }
-  }
 
-  async function replaceLocalVideoTrack(newVideoTrack) {
-    if (!newVideoTrack) throw new Error("Não foi possível abrir a câmera.");
-    if (currentPeerConnection) {
-      const sender = currentPeerConnection.getSenders().find(s => s.track && s.track.kind === "video");
-      if (sender) await sender.replaceTrack(newVideoTrack);
+    const attempts = [
+      { audio: false, video: { facingMode: { ideal: facingMode }, width: { ideal: 640 }, height: { ideal: 480 } } },
+      { audio: false, video: { facingMode: facingMode } },
+      { audio: false, video: true }
+    ];
+
+    let lastError = null;
+    for (const constraints of attempts) {
+      try {
+        return await navigator.mediaDevices.getUserMedia(constraints);
+      } catch (error) {
+        lastError = error;
+      }
     }
-    if (!localCallStream) localCallStream = new MediaStream();
-    localCallStream.getVideoTracks().forEach(track => {
-      localCallStream.removeTrack(track);
-      try { track.stop(); } catch (e) {}
-    });
-    localCallStream.addTrack(newVideoTrack);
-    attachLocalVideoPreview();
+    throw lastError || new Error("Não foi possível abrir a câmera.");
   }
 
   async function flipCallCamera() {
     if (currentCallMediaType !== "video" || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
+
     const oldFacing = callVideoFacingMode || "user";
     const nextFacing = oldFacing === "user" ? "environment" : "user";
-    const oldVideoTrack = localCallStream ? localCallStream.getVideoTracks()[0] : null;
     const cameraBtn = document.getElementById("callFlipCameraBtn");
+    let newStream = null;
 
     try {
       if (cameraBtn) {
@@ -2470,29 +2464,34 @@
         cameraBtn.innerText = "🔄 Trocando...";
       }
 
-      // Alguns Androids não liberam a segunda câmera enquanto a primeira está aberta.
-      // Por isso paramos a câmera atual antes de pedir a outra.
-      if (oldVideoTrack) {
-        try { oldVideoTrack.stop(); } catch (e) {}
-        if (localCallStream) localCallStream.removeTrack(oldVideoTrack);
+      // Primeiro tenta abrir a outra câmera sem mexer na chamada atual.
+      // Assim, se o celular não liberar troca, a ligação não cai.
+      newStream = await getCameraStreamByFacing(nextFacing);
+      const newVideoTrack = newStream.getVideoTracks()[0];
+      if (!newVideoTrack) throw new Error("Não foi possível abrir a outra câmera.");
+
+      const oldVideoTrack = localCallStream ? localCallStream.getVideoTracks()[0] : null;
+
+      if (currentPeerConnection) {
+        const sender = currentPeerConnection.getSenders().find(s => s.track && s.track.kind === "video");
+        if (sender) await sender.replaceTrack(newVideoTrack);
       }
 
-      const newStream = await getVideoStreamForFacingMode(nextFacing);
-      const newVideoTrack = newStream.getVideoTracks()[0];
-      await replaceLocalVideoTrack(newVideoTrack);
+      if (!localCallStream) localCallStream = new MediaStream();
+      if (oldVideoTrack) {
+        localCallStream.removeTrack(oldVideoTrack);
+        try { oldVideoTrack.stop(); } catch (e) {}
+      }
+      localCallStream.addTrack(newVideoTrack);
+
       callVideoFacingMode = nextFacing;
+      attachLocalVideoPreview();
       showToast(callVideoFacingMode === "user" ? "Câmera frontal ativada." : "Câmera traseira ativada.", "success");
     } catch (error) {
       console.error("Erro ao virar câmera:", error);
       try {
-        // Se falhar, tenta voltar para a câmera anterior para a ligação não ficar sem vídeo.
-        const restoreStream = await getVideoStreamForFacingMode(oldFacing);
-        const restoreTrack = restoreStream.getVideoTracks()[0];
-        await replaceLocalVideoTrack(restoreTrack);
-        callVideoFacingMode = oldFacing;
-      } catch (restoreError) {
-        console.error("Erro ao restaurar câmera anterior:", restoreError);
-      }
+        if (newStream) newStream.getTracks().forEach(track => track.stop());
+      } catch (e) {}
       alert("Este celular/navegador não conseguiu trocar a câmera agora. A ligação continua normal.");
     } finally {
       if (cameraBtn) cameraBtn.disabled = false;
@@ -2717,7 +2716,6 @@
       };
 
       await db.collection("conversations").doc(meta.conversationId).set({ activeCall: callData }, { merge: true });
-      await sendIncomingCallPush(meta.otherId, type);
     } catch (error) {
       console.error("Erro ao iniciar ligação:", error);
       alert(error.message || "Não foi possível iniciar a ligação de " + callTypeLabel(type) + ".");
@@ -4008,7 +4006,7 @@
     setTimeout(() => chatBody.scrollTop = chatBody.scrollHeight, 80);
   }
 
-  async function sendPushNotificationPayload(receiverId, title, body, url) {
+  async function sendPushNotificationToUser(receiverId, messageText) {
     if (!firebaseReady || !db || !receiverId) return;
 
     try {
@@ -4019,10 +4017,17 @@
       const tokens = receiver.pushTokens || [];
       if (!tokens.length) return;
 
+      const deepLinkUrl = "/?chat=" + encodeURIComponent(currentUser.id);
+
       const response = await fetch("/api/sendNotification", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tokens, title, body, url })
+        body: JSON.stringify({
+          tokens,
+          title: "Nova mensagem de " + currentUser.name,
+          body: messageText,
+          url: deepLinkUrl
+        })
       });
 
       const result = await response.json();
@@ -4030,27 +4035,6 @@
     } catch (error) {
       console.error("Erro ao enviar push notification:", error);
     }
-  }
-
-  async function sendPushNotificationToUser(receiverId, messageText) {
-    const deepLinkUrl = "/?chat=" + encodeURIComponent(currentUser.id);
-    await sendPushNotificationPayload(
-      receiverId,
-      "Nova mensagem de " + currentUser.name,
-      messageText,
-      deepLinkUrl
-    );
-  }
-
-  async function sendIncomingCallPush(receiverId, type = "audio") {
-    const deepLinkUrl = "/?chat=" + encodeURIComponent(currentUser.id) + "&call=1";
-    const label = type === "video" ? "vídeo" : "áudio";
-    await sendPushNotificationPayload(
-      receiverId,
-      "Chamada de " + label + " de " + (currentUser.name || "Contato"),
-      "Toque para abrir o Zappi e atender.",
-      deepLinkUrl
-    );
   }
 
   async function sendMessage() {
@@ -4767,7 +4751,7 @@
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", async () => {
       try {
-        await navigator.serviceWorker.register("sw.js?v=200");
+        await navigator.serviceWorker.register("sw.js?v=201");
       } catch (error) {
         console.error(error);
       }
