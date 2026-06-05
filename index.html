@@ -12,7 +12,6 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.4/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.4/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.4/firebase-storage-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.4/firebase-messaging-compat.js"></script>
 
   <style>
@@ -84,14 +83,19 @@
     .msg.other{align-self:flex-start;background:white;border-bottom-left-radius:4px}
     .msg small{display:block;text-align:right;font-size:10px;opacity:.55;margin-top:4px}
     .msg-img-wrap{padding:4px;background:transparent}
-    .msg-img{display:block;max-width:230px;max-height:260px;border-radius:12px;object-fit:cover;cursor:pointer}
+    .msg-img{display:block;max-width:230px;max-height:260px;border-radius:12px;object-fit:cover;cursor:pointer;background:#ddd}
     .msg-caption{font-size:13px;margin-top:6px}
-    .uploading{opacity:.75;font-style:italic}
+    .uploading{opacity:.8;font-style:italic}
     .chat-input{height:76px;background:#f0f2f5;padding:10px 10px calc(10px + env(safe-area-inset-bottom));display:flex;gap:8px;align-items:center;border-top:1px solid rgba(0,0,0,.08);position:absolute;bottom:0;left:0;right:0;z-index:25}
     .chat-input input[type="text"]{border-radius:22px;padding:13px 15px;font-size:16px}
     .attach-btn{width:44px;height:44px;border-radius:50%;background:#fff;color:#075E54;font-size:21px;flex-shrink:0;display:flex;align-items:center;justify-content:center;border:1px solid #d7d7d7;padding:0}
     .send-btn{width:48px;height:48px;border-radius:50%;background:#128C7E;color:white;font-size:18px;flex-shrink:0;display:flex;align-items:center;justify-content:center}
     .hidden-file{display:none}
+
+    .image-modal{position:absolute;inset:0;background:rgba(0,0,0,.92);z-index:99999;display:none;align-items:center;justify-content:center;padding:18px}
+    .image-modal.active{display:flex}
+    .image-modal img{max-width:100%;max-height:90%;border-radius:12px}
+    .image-modal button{position:absolute;top:16px;right:16px;background:white;color:#111;border-radius:50%;width:44px;height:44px;padding:0;font-size:24px}
 
     .in-app-toast{position:absolute;top:14px;left:14px;right:14px;z-index:9999;background:#075E54;color:white;padding:13px 14px;border-radius:16px;box-shadow:0 10px 25px rgba(0,0,0,.25);display:none;align-items:center;gap:10px;cursor:pointer;animation:slideDown .25s ease-out}
     .in-app-toast.active{display:flex}
@@ -106,6 +110,11 @@
 
 <body>
 <div class="app">
+  <div id="imageModal" class="image-modal" onclick="closeImageFull()">
+    <button onclick="closeImageFull()">×</button>
+    <img id="modalImage" src="" alt="Imagem" />
+  </div>
+
   <div id="inAppToast" class="in-app-toast" onclick="openToastConversation()">
     <div class="toast-avatar" id="toastAvatar">Z</div>
     <div class="toast-text">
@@ -141,7 +150,7 @@
       </div>
 
       <div class="notice">
-        Versão 2.2: envio de imagem/foto no chat usando Firebase Storage.
+        Versão 2.3: envio de imagem grátis, comprimida e salva no Firestore.
       </div>
     </div>
   </div>
@@ -205,7 +214,6 @@
   let firebaseReady = false;
   let db = null;
   let auth = null;
-  let storage = null;
   let messaging = null;
   let currentUser = null;
   let contacts = [];
@@ -222,6 +230,7 @@
   let pendingOpenChatUserId = null;
   let deepLinkAlreadyHandled = false;
   let isUploadingImage = false;
+  let tempUploadId = "";
 
   const localKey = "zappi_web_v1_data";
 
@@ -272,7 +281,7 @@
     if (!("serviceWorker" in navigator)) return null;
 
     try {
-      const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js?v=72", {
+      const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js?v=80", {
         scope: "/"
       });
 
@@ -294,7 +303,6 @@
       firebase.initializeApp(firebaseConfig);
       auth = firebase.auth();
       db = firebase.firestore();
-      storage = firebase.storage();
 
       await auth.signInAnonymously();
 
@@ -829,7 +837,7 @@
         </div>
 
         <p class="hint">
-          As notificações já chegam no celular. Se o toque nelas não abrir o app, continuamos usando como aviso sonoro/visual.
+          As imagens agora são comprimidas e salvas no Firestore. Não precisa ativar Firebase Storage.
         </p>
       </div>
 
@@ -947,11 +955,13 @@
           }
 
           firstMessagesSnapshot = false;
+          removeTempUploadMessage();
           renderMessages(messages);
         });
     } else {
       const data = loadLocal();
       const messages = data.messages[conversationId] || [];
+      removeTempUploadMessage();
       renderMessages(messages);
     }
   }
@@ -968,9 +978,11 @@
       const mine = m.senderId === currentUser.id;
 
       if (m.type === "image") {
+        const img = m.imageData || m.imageUrl || "";
+
         return `
           <div class="msg ${mine ? "me" : "other"} msg-img-wrap">
-            <img class="msg-img" src="${escapeHtml(m.imageUrl || "")}" onclick="openImageFull('${escapeHtml(m.imageUrl || "")}')" />
+            <img class="msg-img" src="${escapeAttr(img)}" onclick="openImageFull('${escapeAttr(img)}')" />
             ${m.text ? `<div class="msg-caption">${escapeHtml(m.text)}</div>` : ""}
             <small>${m.timeText || ""}</small>
           </div>
@@ -990,7 +1002,13 @@
 
   function openImageFull(url) {
     if (!url) return;
-    window.open(url, "_blank");
+    document.getElementById("modalImage").src = url;
+    document.getElementById("imageModal").classList.add("active");
+  }
+
+  function closeImageFull() {
+    document.getElementById("imageModal").classList.remove("active");
+    document.getElementById("modalImage").src = "";
   }
 
   function scrollChatToBottom() {
@@ -1045,10 +1063,11 @@
     if (!text || !activeChat) return;
 
     input.value = "";
+
     await createMessage({
       type: "text",
       text,
-      imageUrl: ""
+      imageData: ""
     });
 
     playMessageSound();
@@ -1062,20 +1081,13 @@
     if (!file) return;
     if (!activeChat) return alert("Abra uma conversa primeiro.");
 
-    if (!firebaseReady || !storage) {
-      alert("O Firebase Storage ainda não está conectado.");
+    if (!firebaseReady || !db) {
+      alert("O Firebase ainda não está conectado.");
       return;
     }
 
     if (!file.type.startsWith("image/")) {
       alert("Escolha apenas imagem ou foto.");
-      return;
-    }
-
-    const maxSize = 8 * 1024 * 1024;
-
-    if (file.size > maxSize) {
-      alert("Imagem muito grande. Escolha uma foto de até 8 MB.");
       return;
     }
 
@@ -1085,53 +1097,165 @@
     }
 
     isUploadingImage = true;
-    showUploadingMessage();
+    showUploadingMessage("Comprimindo imagem...");
+
+    const timeout = setTimeout(() => {
+      if (isUploadingImage) {
+        removeTempUploadMessage();
+        isUploadingImage = false;
+        alert("O envio demorou demais. Tente uma imagem menor ou tire um print mais leve.");
+      }
+    }, 25000);
 
     try {
-      const otherId = activeChat.contactUserId || ("user_" + activeChat.phone);
-      const conversationId = getConversationId(currentUser.id, otherId);
-      const extension = (file.name.split(".").pop() || "jpg").toLowerCase();
-      const safeName = "img_" + Date.now() + "_" + Math.random().toString(36).slice(2) + "." + extension;
-      const path = "chat_images/" + conversationId + "/" + safeName;
+      const compressedImage = await compressImageToBase64(file, 760, 0.55);
 
-      const ref = storage.ref().child(path);
+      if (!compressedImage || compressedImage.length < 100) {
+        throw new Error("Falha ao comprimir imagem.");
+      }
 
-      await ref.put(file, {
-        contentType: file.type
-      });
+      const approxKb = Math.round((compressedImage.length * 3 / 4) / 1024);
 
-      const imageUrl = await ref.getDownloadURL();
+      if (compressedImage.length > 820000) {
+        throw new Error("A imagem ainda ficou grande demais após compressão. Tente outra foto menor.");
+      }
+
+      showUploadingMessage("Enviando imagem... " + approxKb + " KB");
 
       await createMessage({
         type: "image",
         text: "",
-        imageUrl,
-        storagePath: path,
-        fileName: file.name
+        imageData: compressedImage,
+        fileName: file.name || "imagem.jpg"
       });
 
       playMessageSound();
 
     } catch (error) {
       console.error("Erro ao enviar imagem:", error);
-      alert("Não foi possível enviar a imagem. Verifique as regras do Firebase Storage.");
+      alert(error.message || "Não foi possível enviar a imagem.");
     } finally {
+      clearTimeout(timeout);
       isUploadingImage = false;
+      removeTempUploadMessage();
     }
   }
 
-  function showUploadingMessage() {
+  function compressImageToBase64(file, maxSize, quality) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+
+      reader.onload = function(event) {
+        const img = new Image();
+
+        img.onload = function() {
+          let width = img.width;
+          let height = img.height;
+
+          if (width > height) {
+            if (width > maxSize) {
+              height = Math.round(height * maxSize / width);
+              width = maxSize;
+            }
+          } else {
+            if (height > maxSize) {
+              width = Math.round(width * maxSize / height);
+              height = maxSize;
+            }
+          }
+
+          const canvas = document.createElement("canvas");
+          canvas.width = width;
+          canvas.height = height;
+
+          const ctx = canvas.getContext("2d");
+          ctx.fillStyle = "#fff";
+          ctx.fillRect(0, 0, width, height);
+          ctx.drawImage(img, 0, 0, width, height);
+
+          let output = canvas.toDataURL("image/jpeg", quality);
+
+          if (output.length > 820000) {
+            output = canvas.toDataURL("image/jpeg", 0.42);
+          }
+
+          if (output.length > 820000) {
+            const smallerCanvas = document.createElement("canvas");
+            const smallerMax = 560;
+            let sw = img.width;
+            let sh = img.height;
+
+            if (sw > sh) {
+              if (sw > smallerMax) {
+                sh = Math.round(sh * smallerMax / sw);
+                sw = smallerMax;
+              }
+            } else {
+              if (sh > smallerMax) {
+                sw = Math.round(sw * smallerMax / sh);
+                sh = smallerMax;
+              }
+            }
+
+            smallerCanvas.width = sw;
+            smallerCanvas.height = sh;
+
+            const sctx = smallerCanvas.getContext("2d");
+            sctx.fillStyle = "#fff";
+            sctx.fillRect(0, 0, sw, sh);
+            sctx.drawImage(img, 0, 0, sw, sh);
+
+            output = smallerCanvas.toDataURL("image/jpeg", 0.38);
+          }
+
+          resolve(output);
+        };
+
+        img.onerror = function() {
+          reject(new Error("Não foi possível ler a imagem."));
+        };
+
+        img.src = event.target.result;
+      };
+
+      reader.onerror = function() {
+        reject(new Error("Não foi possível abrir o arquivo."));
+      };
+
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function showUploadingMessage(text) {
     const chatBody = document.getElementById("chatBody");
+    if (!chatBody) return;
+
+    removeTempUploadMessage();
+
+    tempUploadId = "temp_upload_" + Date.now();
 
     const temp = document.createElement("div");
+    temp.id = tempUploadId;
     temp.className = "msg me uploading";
-    temp.innerHTML = `Enviando imagem...<small>${nowText()}</small>`;
+    temp.innerHTML = `${escapeHtml(text)}<small>${nowText()}</small>`;
 
     chatBody.appendChild(temp);
     scrollChatToBottom();
   }
 
-  async function createMessage({ type, text, imageUrl, storagePath, fileName }) {
+  function removeTempUploadMessage() {
+    if (!tempUploadId) return;
+
+    const temp = document.getElementById(tempUploadId);
+
+    if (temp) {
+      temp.remove();
+    }
+
+    tempUploadId = "";
+  }
+
+  async function createMessage({ type, text, imageData, fileName }) {
     if (!activeChat) return;
 
     const otherId = activeChat.contactUserId || ("user_" + activeChat.phone);
@@ -1147,8 +1271,7 @@
       receiverId: otherId,
       text: text || "",
       type: type || "text",
-      imageUrl: imageUrl || "",
-      storagePath: storagePath || "",
+      imageData: imageData || "",
       fileName: fileName || "",
       createdAt: Date.now(),
       timeText: nowText(),
@@ -1389,6 +1512,13 @@
       .replaceAll("'", "&#039;");
   }
 
+  function escapeAttr(text) {
+    return String(text || "")
+      .replaceAll("&", "&amp;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+
   window.addEventListener("beforeinstallprompt", event => {
     event.preventDefault();
     deferredInstallPrompt = event;
@@ -1414,7 +1544,7 @@
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", async () => {
       try {
-        await navigator.serviceWorker.register("sw.js?v=72");
+        await navigator.serviceWorker.register("sw.js?v=80");
       } catch (error) {
         console.error(error);
       }
