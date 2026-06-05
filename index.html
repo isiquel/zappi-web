@@ -322,7 +322,7 @@
       </div>
 
       <div class="notice">
-        Versão 3.9.2: clique na foto abre o story; clique no nome abre contato/conversa.
+        Versão 3.9.1: perfil mais limpo, sem mensagens técnicas, mantendo limpeza automática de 7 dias.
       </div>
     </div>
   </div>
@@ -530,7 +530,7 @@
     if (!("serviceWorker" in navigator)) return null;
 
     try {
-      const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js?v=190", { scope: "/" });
+      const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js?v=191", { scope: "/" });
       await navigator.serviceWorker.ready;
       if (registration && registration.update) registration.update();
       return registration;
@@ -805,7 +805,7 @@
         storyStatuses: nextStatuses,
         lastStoryAt: item.createdAt,
         updatedAt: Date.now(),
-        appVersion: "3.9"
+        appVersion: "3.9.1"
       }, { merge: true });
 
       currentUser.storyStatuses = nextStatuses;
@@ -1128,7 +1128,7 @@
           storyStatuses: fresh,
           lastStoryAt: fresh[0]?.createdAt || 0,
           updatedAt: Date.now(),
-          appVersion: "3.9"
+          appVersion: "3.9.1"
         }, { merge: true });
 
         currentUser.storyStatuses = fresh;
@@ -1195,7 +1195,7 @@
       lastActiveAt: now,
       presenceUpdatedAt: now,
       updatedAt: now,
-      appVersion: "3.9"
+      appVersion: "3.9.1"
     };
 
     if (!isOnline) payload.lastSeen = now;
@@ -1305,7 +1305,7 @@
       lastSeen: null,
       lastActiveAt: Date.now(),
       presenceUpdatedAt: Date.now(),
-      appVersion: "3.9",
+      appVersion: "3.9.1",
       createdAt: Date.now(),
       updatedAt: Date.now()
     };
@@ -1345,7 +1345,7 @@
           lastActiveAt: Date.now(),
           presenceUpdatedAt: Date.now(),
           updatedAt: Date.now(),
-          appVersion: "3.9"
+          appVersion: "3.9.1"
         }, { merge: true });
 
         localStorage.setItem("zappi_current_user", JSON.stringify(currentUser));
@@ -1908,8 +1908,6 @@
             <button class="btn-light" onclick="removeProfilePhoto()">Remover foto</button>
           </div>
         </div>
-
-        <p class="hint">A foto será comprimida e salva no Firestore. Não precisa Firebase Storage.</p>
       </div>
 
       <br>
@@ -2050,7 +2048,7 @@
         await db.collection("users").doc(currentUser.id).set({
           statusText,
           updatedAt: Date.now(),
-          appVersion: "3.9"
+          appVersion: "3.9.1"
         }, { merge: true });
 
         await updateMyStatusInConversations(statusText);
@@ -3935,7 +3933,7 @@
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", async () => {
       try {
-        await navigator.serviceWorker.register("sw.js?v=190");
+        await navigator.serviceWorker.register("sw.js?v=191");
       } catch (error) {
         console.error(error);
       }
