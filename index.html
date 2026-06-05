@@ -109,6 +109,9 @@
     .msg-status.read{color:#34B7F1}
     .msg-img-wrap{padding:4px;background:transparent}
     .msg-img{display:block;max-width:230px;max-height:260px;border-radius:12px;object-fit:cover;cursor:pointer;background:#ddd}
+    .msg-img-actions{display:flex;justify-content:flex-end;gap:6px;margin-top:6px}
+    .save-img-mini{background:rgba(7,94,84,.10);color:#075E54;border-radius:999px;padding:6px 9px;font-size:11px;font-weight:900}
+    .date-separator{align-self:center;background:rgba(255,255,255,.78);color:#53615d;font-size:11px;font-weight:900;padding:6px 11px;border-radius:999px;margin:9px 0 5px;box-shadow:0 1px 2px rgba(0,0,0,.10);text-transform:uppercase;letter-spacing:.2px}
     .msg-caption{font-size:13px;margin-top:6px}
     .uploading{opacity:.8;font-style:italic}
     .audio-msg{min-width:230px;display:flex;flex-direction:column;gap:6px}
@@ -198,6 +201,7 @@
       <button class="btn-primary" onclick="replySelectedMessage()">Responder</button>
       <button class="btn-light" onclick="openForwardPicker()">Encaminhar</button>
       <button id="copyMessageBtn" class="btn-light" onclick="copySelectedMessage()">Copiar mensagem</button>
+      <button id="saveImageBtn" class="btn-light" onclick="saveSelectedImage()">Salvar imagem</button>
       <button id="favoriteMessageBtn" class="btn-light" onclick="toggleFavoriteSelectedMessage()">Favoritar</button>
       <button id="editMessageBtn" class="btn-light" onclick="editSelectedMessage()">Editar</button>
       <button class="btn-light" onclick="deleteMessageForMe()">Apagar só para mim</button>
@@ -251,7 +255,7 @@
       </div>
 
       <div class="notice">
-        Versão 3.4: online, visto por último, digitando mais firme e presença automática.
+        Versão 3.5: salvar imagem no celular, separador de datas, visual melhorado nas fotos e presença automática.
       </div>
     </div>
   </div>
@@ -437,7 +441,7 @@
     if (!("serviceWorker" in navigator)) return null;
 
     try {
-      const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js?v=181", { scope: "/" });
+      const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js?v=182", { scope: "/" });
       await navigator.serviceWorker.ready;
       if (registration && registration.update) registration.update();
       return registration;
@@ -497,6 +501,35 @@
   function formatTime(timestamp) {
     if (!timestamp) return "";
     return new Date(timestamp).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  }
+
+  function dayKey(timestamp) {
+    if (!timestamp) return "sem-data";
+    const d = new Date(timestamp);
+    return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+  }
+
+  function formatDateSeparator(timestamp) {
+    if (!timestamp) return "Hoje";
+
+    const date = new Date(timestamp);
+    const today = new Date();
+    const yesterday = new Date();
+    yesterday.setDate(today.getDate() - 1);
+
+    const sameDay = (a, b) =>
+      a.getFullYear() === b.getFullYear() &&
+      a.getMonth() === b.getMonth() &&
+      a.getDate() === b.getDate();
+
+    if (sameDay(date, today)) return "Hoje";
+    if (sameDay(date, yesterday)) return "Ontem";
+
+    return date.toLocaleDateString("pt-BR", {
+      day: "2-digit",
+      month: "long",
+      year: date.getFullYear() === today.getFullYear() ? undefined : "numeric"
+    });
   }
 
   function formatDuration(seconds) {
@@ -1668,6 +1701,8 @@
       return;
     }
 
+    let lastDay = "";
+
     chatBody.innerHTML = visibleMessages.map(m => {
       const mine = m.senderId === currentUser.id;
       const status = getMessageStatusHtml(m, mine);
@@ -1676,9 +1711,13 @@
       const forwardedHtml = renderForwardedLabel(m);
       const editedHtml = renderEditedLabel(m);
       const favoriteHtml = renderFavoriteLabel(m);
+      const msgDay = dayKey(m.createdAt || m.timestamp || 0);
+      const dateHtml = msgDay !== lastDay ? `<div class="date-separator">${escapeHtml(formatDateSeparator(m.createdAt || m.timestamp || Date.now()))}</div>` : "";
+      lastDay = msgDay;
 
       if (m.deleted) {
         return `
+          ${dateHtml}
           <div class="msg ${mine ? "me" : "other"} deleted-msg">
             ${favoriteHtml}
             ${forwardedHtml}
@@ -1694,12 +1733,16 @@
         const img = m.imageData || m.imageUrl || "";
 
         return `
+          ${dateHtml}
           <div class="msg ${mine ? "me" : "other"} msg-img-wrap">
             ${favoriteHtml}
             ${forwardedHtml}
             ${replyHtml}
             <img class="msg-img" src="${escapeAttr(img)}" onclick="openImageFull('${escapeAttr(img)}')" />
             ${m.text ? `<div class="msg-caption">${escapeHtml(m.text)}</div>` : ""}
+            <div class="msg-img-actions">
+              <button class="save-img-mini" onclick="event.stopPropagation();saveImageFromData('${messageId}')">Salvar foto</button>
+            </div>
             <small>${m.timeText || ""}${editedHtml}${status}</small>
             <button class="msg-menu-btn" onclick="event.stopPropagation();openMessageMenu('${messageId}', ${mine})">⋮</button>
           </div>
@@ -1711,6 +1754,7 @@
         const mime = m.audioMime || "audio/webm";
 
         return `
+          ${dateHtml}
           <div class="msg ${mine ? "me" : "other"} audio-msg">
             ${favoriteHtml}
             ${forwardedHtml}
@@ -1726,6 +1770,7 @@
       }
 
       return `
+        ${dateHtml}
         <div class="msg ${mine ? "me" : "other"}">
           ${favoriteHtml}
           ${forwardedHtml}
@@ -1751,6 +1796,7 @@
     const deleteForAllBtn = document.getElementById("deleteForAllBtn");
     const editBtn = document.getElementById("editMessageBtn");
     const copyBtn = document.getElementById("copyMessageBtn");
+    const saveImageBtn = document.getElementById("saveImageBtn");
     const favBtn = document.getElementById("favoriteMessageBtn");
 
     if (deleteForAllBtn) deleteForAllBtn.style.display = selectedMessageMine ? "block" : "none";
@@ -1770,6 +1816,16 @@
         message &&
         !message.deleted &&
         message.type === "text"
+          ? "block"
+          : "none";
+    }
+
+    if (saveImageBtn) {
+      saveImageBtn.style.display =
+        message &&
+        !message.deleted &&
+        message.type === "image" &&
+        (message.imageData || message.imageUrl)
           ? "block"
           : "none";
     }
@@ -1807,6 +1863,42 @@
       console.error("Erro ao copiar:", error);
       alert("Não foi possível copiar a mensagem.");
     }
+  }
+
+  function base64Extension(imageData) {
+    const match = String(imageData || "").match(/^data:image\/(png|jpeg|jpg|webp|gif);/i);
+    if (!match) return "jpg";
+    return match[1].toLowerCase() === "jpeg" ? "jpg" : match[1].toLowerCase();
+  }
+
+  function saveImageFromData(messageId) {
+    const message = currentMessagesCache.find(m => m.id === messageId);
+
+    if (!message || message.deleted || message.type !== "image") {
+      return alert("Imagem não encontrada para salvar.");
+    }
+
+    const imageData = message.imageData || message.imageUrl || "";
+    if (!imageData) return alert("Imagem não encontrada para salvar.");
+
+    try {
+      const link = document.createElement("a");
+      const ext = base64Extension(imageData);
+      link.href = imageData;
+      link.download = "zappi-foto-" + Date.now() + "." + ext;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (error) {
+      console.error("Erro ao salvar imagem:", error);
+      alert("Não foi possível salvar automaticamente. Toque na foto, segure e escolha salvar imagem.");
+    }
+  }
+
+  function saveSelectedImage() {
+    if (!selectedMessageId) return;
+    saveImageFromData(selectedMessageId);
+    closeMessageMenu();
   }
 
   async function toggleFavoriteSelectedMessage() {
@@ -2984,7 +3076,7 @@
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", async () => {
       try {
-        await navigator.serviceWorker.register("sw.js?v=181");
+        await navigator.serviceWorker.register("sw.js?v=182");
       } catch (error) {
         console.error(error);
       }
