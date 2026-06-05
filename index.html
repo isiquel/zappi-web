@@ -101,6 +101,7 @@
     .msg-menu-btn{position:absolute;right:5px;bottom:3px;width:24px;height:24px;border-radius:50%;background:rgba(0,0,0,.06);color:#333;padding:0;font-size:16px;display:flex;align-items:center;justify-content:center}
     .msg.me .msg-menu-btn{background:rgba(0,0,0,.08)}
 
+    .forwarded-label{display:block;font-size:11px;color:#667;margin-bottom:4px;font-style:italic}
     .reply-box{border-left:4px solid #128C7E;background:rgba(7,94,84,.08);border-radius:10px;padding:7px 9px;margin-bottom:7px;font-size:12px;color:#333;max-width:100%;overflow:hidden}
     .reply-box strong{display:block;color:#075E54;font-size:12px;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     .reply-box span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:.85}
@@ -111,12 +112,16 @@
     .reply-preview-content span{font-size:12px;color:#555;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     .reply-preview button{width:34px;height:34px;border-radius:50%;padding:0;background:#e7eeee;color:#333;font-size:20px;flex-shrink:0}
 
-    .msg-menu-overlay{position:absolute;inset:0;background:rgba(0,0,0,.35);z-index:99998;display:none;align-items:flex-end;justify-content:center;padding:14px}
-    .msg-menu-overlay.active{display:flex}
-    .msg-menu-box{width:100%;max-width:440px;background:white;border-radius:22px 22px 18px 18px;padding:14px;box-shadow:0 -8px 30px rgba(0,0,0,.25);display:flex;flex-direction:column;gap:10px}
-    .msg-menu-box h3{font-size:16px;color:#075E54;margin-bottom:4px}
+    .msg-menu-overlay,.forward-overlay{position:absolute;inset:0;background:rgba(0,0,0,.35);z-index:99998;display:none;align-items:flex-end;justify-content:center;padding:14px}
+    .msg-menu-overlay.active,.forward-overlay.active{display:flex}
+    .msg-menu-box,.forward-box{width:100%;max-width:440px;background:white;border-radius:22px 22px 18px 18px;padding:14px;box-shadow:0 -8px 30px rgba(0,0,0,.25);display:flex;flex-direction:column;gap:10px;max-height:82vh}
+    .msg-menu-box h3,.forward-box h3{font-size:16px;color:#075E54;margin-bottom:4px}
     .msg-menu-box button{text-align:left}
-    .msg-menu-box .cancel{text-align:center;background:#f2f2f2;color:#333}
+    .msg-menu-box .cancel,.forward-box .cancel{text-align:center;background:#f2f2f2;color:#333}
+    .forward-list{overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding-right:2px}
+    .forward-contact{background:#f7fbfa;border:1px solid #e1efec;border-radius:16px;padding:12px;display:flex;align-items:center;gap:10px;cursor:pointer}
+    .forward-contact h4{font-size:14px;margin-bottom:3px}
+    .forward-contact p{font-size:12px;color:#666}
 
     .recording-bar{position:absolute;left:8px;right:8px;bottom:82px;background:#fff3f3;border:1px solid #ffb7b7;color:#8b0000;border-radius:16px;padding:10px 12px;display:none;align-items:center;justify-content:space-between;gap:10px;z-index:30;box-shadow:0 8px 20px rgba(0,0,0,.15)}
     .recording-bar.active{display:flex}
@@ -158,9 +163,20 @@
     <div class="msg-menu-box" onclick="event.stopPropagation()">
       <h3>Opções da mensagem</h3>
       <button class="btn-primary" onclick="replySelectedMessage()">Responder</button>
+      <button class="btn-light" onclick="openForwardPicker()">Encaminhar</button>
       <button class="btn-light" onclick="deleteMessageForMe()">Apagar só para mim</button>
       <button id="deleteForAllBtn" class="btn-danger" onclick="deleteMessageForAll()">Apagar para todos</button>
       <button class="cancel" onclick="closeMessageMenu()">Cancelar</button>
+    </div>
+  </div>
+
+  <div id="forwardOverlay" class="forward-overlay" onclick="closeForwardPicker()">
+    <div class="forward-box" onclick="event.stopPropagation()">
+      <h3>Encaminhar para</h3>
+      <div id="forwardList" class="forward-list">
+        <div class="empty">Carregando contatos...</div>
+      </div>
+      <button class="cancel" onclick="closeForwardPicker()">Cancelar</button>
     </div>
   </div>
 
@@ -199,7 +215,7 @@
       </div>
 
       <div class="notice">
-        Versão 3.0: agora é possível responder mensagem específica.
+        Versão 3.1: agora é possível encaminhar mensagens para outros contatos.
       </div>
     </div>
   </div>
@@ -308,6 +324,8 @@
   let selectedMessageMine = false;
   let currentMessagesCache = [];
   let replyToMessage = null;
+  let forwardMessageData = null;
+  let isForwarding = false;
 
   let mediaRecorder = null;
   let audioChunks = [];
@@ -365,7 +383,7 @@
     if (!("serviceWorker" in navigator)) return null;
 
     try {
-      const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js?v=150", { scope: "/" });
+      const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js?v=160", { scope: "/" });
       await navigator.serviceWorker.ready;
       if (registration && registration.update) registration.update();
       return registration;
@@ -1346,6 +1364,11 @@
     `;
   }
 
+  function renderForwardedLabel(message) {
+    if (!message || !message.forwarded) return "";
+    return `<span class="forwarded-label">↪ Encaminhada</span>`;
+  }
+
   function renderMessages(messages) {
     const chatBody = document.getElementById("chatBody");
 
@@ -1364,10 +1387,12 @@
       const status = getMessageStatusHtml(m, mine);
       const messageId = escapeAttr(m.id || "");
       const replyHtml = renderReplyBox(m.replyTo);
+      const forwardedHtml = renderForwardedLabel(m);
 
       if (m.deleted) {
         return `
           <div class="msg ${mine ? "me" : "other"} deleted-msg">
+            ${forwardedHtml}
             ${replyHtml}
             Mensagem apagada
             <small>${m.timeText || ""}${status}</small>
@@ -1381,6 +1406,7 @@
 
         return `
           <div class="msg ${mine ? "me" : "other"} msg-img-wrap">
+            ${forwardedHtml}
             ${replyHtml}
             <img class="msg-img" src="${escapeAttr(img)}" onclick="openImageFull('${escapeAttr(img)}')" />
             ${m.text ? `<div class="msg-caption">${escapeHtml(m.text)}</div>` : ""}
@@ -1396,6 +1422,7 @@
 
         return `
           <div class="msg ${mine ? "me" : "other"} audio-msg">
+            ${forwardedHtml}
             ${replyHtml}
             <div class="audio-row">
               <span>🎤</span>
@@ -1409,6 +1436,7 @@
 
       return `
         <div class="msg ${mine ? "me" : "other"}">
+          ${forwardedHtml}
           ${replyHtml}
           ${escapeHtml(m.text || "")}
           <small>${m.timeText || ""}${status}</small>
@@ -1480,6 +1508,176 @@
 
     if (preview) preview.classList.remove("active");
     if (chatBody) chatBody.classList.remove("with-reply");
+  }
+
+  async function openForwardPicker() {
+    if (!selectedMessageId) return;
+
+    const message = currentMessagesCache.find(m => m.id === selectedMessageId);
+
+    if (!message) {
+      closeMessageMenu();
+      return alert("Não foi possível localizar a mensagem.");
+    }
+
+    if (message.deleted || message.type === "deleted") {
+      closeMessageMenu();
+      return alert("Não é possível encaminhar mensagem apagada.");
+    }
+
+    forwardMessageData = {
+      id: message.id,
+      text: message.text || "",
+      type: message.type || "text",
+      imageData: message.imageData || "",
+      imageUrl: message.imageUrl || "",
+      audioData: message.audioData || "",
+      audioMime: message.audioMime || "",
+      audioDuration: message.audioDuration || 0,
+      fileName: message.fileName || "",
+      originalSenderName: message.senderName || ""
+    };
+
+    closeMessageMenu();
+    await loadContacts();
+
+    const list = document.getElementById("forwardList");
+
+    if (!contacts.length) {
+      list.innerHTML = `<div class="empty">Nenhum contato salvo para encaminhar.</div>`;
+    } else {
+      list.innerHTML = contacts.map(c => {
+        const name = c.name || c.savedName || "Contato";
+        const phone = c.phone || "";
+        const photo = c.photoData || c.photoUrl || "";
+
+        return `
+          <div class="forward-contact" onclick="sendForwardToContact('${safeJson(c)}')">
+            ${avatarHtml(name, photo, "small")}
+            <div class="contact-main">
+              <h4>${escapeHtml(name)}</h4>
+              <p>${escapeHtml(phone)}</p>
+            </div>
+          </div>
+        `;
+      }).join("");
+    }
+
+    document.getElementById("forwardOverlay").classList.add("active");
+  }
+
+  function closeForwardPicker() {
+    document.getElementById("forwardOverlay").classList.remove("active");
+    forwardMessageData = null;
+    isForwarding = false;
+  }
+
+  async function sendForwardToContact(encodedContact) {
+    if (isForwarding) return;
+    if (!forwardMessageData) return;
+
+    const contact = JSON.parse(decodeURIComponent(encodedContact));
+    const ok = confirm("Encaminhar mensagem para " + (contact.name || contact.savedName || "Contato") + "?");
+
+    if (!ok) return;
+
+    isForwarding = true;
+
+    try {
+      await createForwardedMessage(contact, forwardMessageData);
+      closeForwardPicker();
+      alert("Mensagem encaminhada.");
+    } catch (error) {
+      console.error("Erro ao encaminhar:", error);
+      alert("Não foi possível encaminhar a mensagem.");
+      isForwarding = false;
+    }
+  }
+
+  async function createForwardedMessage(contact, source) {
+    if (!currentUser || !firebaseReady || !db) throw new Error("Firebase não conectado.");
+
+    const otherId = contact.contactUserId || ("user_" + contact.phone);
+    const conversationId = getConversationId(currentUser.id, otherId);
+    const otherUser = await getUserById(otherId);
+
+    let messageText = source.text || "";
+
+    if (source.type === "image") messageText = "📷 Imagem";
+    if (source.type === "audio") messageText = "🎤 Áudio";
+
+    const message = {
+      conversationId,
+      senderId: currentUser.id,
+      senderName: currentUser.name,
+      receiverId: otherId,
+      text: source.text || "",
+      type: source.type || "text",
+      imageData: source.imageData || "",
+      imageUrl: source.imageUrl || "",
+      audioData: source.audioData || "",
+      audioMime: source.audioMime || "",
+      audioDuration: source.audioDuration || 0,
+      fileName: source.fileName || "",
+      forwarded: true,
+      forwardedFrom: source.originalSenderName || "",
+      replyTo: null,
+      deleted: false,
+      deletedFor: [],
+      createdAt: Date.now(),
+      timeText: nowText(),
+      deliveredAt: null,
+      readAt: null,
+      read: false
+    };
+
+    const convRef = db.collection("conversations").doc(conversationId);
+
+    const participantInfo = {};
+
+    participantInfo[currentUser.id] = {
+      name: currentUser.name,
+      phone: currentUser.phone,
+      photoUrl: currentUser.photoUrl || "",
+      photoData: currentUser.photoData || ""
+    };
+
+    participantInfo[otherId] = {
+      name: otherUser?.name || contact.name || contact.savedName || "Contato",
+      phone: otherUser?.phone || contact.phone || "",
+      photoUrl: otherUser?.photoUrl || contact.photoUrl || "",
+      photoData: otherUser?.photoData || contact.photoData || ""
+    };
+
+    const readBy = {};
+    readBy[currentUser.id] = Date.now();
+
+    await convRef.set({
+      id: conversationId,
+      participants: [currentUser.id, otherId],
+      participantInfo,
+      lastMessage: "↪ " + messageText,
+      lastSenderId: currentUser.id,
+      updatedAt: Date.now(),
+      readBy
+    }, { merge: true });
+
+    const messageRef = await convRef.collection("messages").add(message);
+
+    setTimeout(async () => {
+      try {
+        await messageRef.set({ deliveredAt: Date.now() }, { merge: true });
+      } catch (error) {
+        console.error("Erro ao marcar encaminhada como entregue:", error);
+      }
+    }, 600);
+
+    await sendPushNotificationToUser(
+      otherId,
+      source.type === "image" ? "↪ Encaminhou uma imagem" :
+      source.type === "audio" ? "↪ Encaminhou um áudio" :
+      "↪ " + (source.text || "Mensagem encaminhada")
+    );
   }
 
   async function deleteMessageForMe() {
@@ -1986,6 +2184,8 @@
       audioDuration: audioDuration || 0,
       fileName: fileName || "",
       replyTo,
+      forwarded: false,
+      forwardedFrom: "",
       deleted: false,
       deletedFor: [],
       createdAt: Date.now(),
@@ -2255,7 +2455,7 @@
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", async () => {
       try {
-        await navigator.serviceWorker.register("sw.js?v=150");
+        await navigator.serviceWorker.register("sw.js?v=160");
       } catch (error) {
         console.error(error);
       }
