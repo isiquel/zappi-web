@@ -532,6 +532,9 @@
   let statusViewerTimer = null;
   let cleanupRunning = false;
   let activeCallUnsubscribe = null;
+  let globalCallUnsubscribe = null;
+  let globalIncomingCallOpening = false;
+  let handledGlobalIncomingCallIds = {};
   let currentCallId = "";
   let currentCallRole = "";
   let currentCallData = null;
@@ -604,7 +607,7 @@
     if (!("serviceWorker" in navigator)) return null;
 
     try {
-      const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js?v=201", { scope: "/" });
+      const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js?v=202", { scope: "/" });
       await navigator.serviceWorker.ready;
       if (registration && registration.update) registration.update();
       return registration;
@@ -879,7 +882,7 @@
         storyStatuses: nextStatuses,
         lastStoryAt: item.createdAt,
         updatedAt: Date.now(),
-        appVersion: "4.1.3"
+        appVersion: "4.1.4"
       }, { merge: true });
 
       currentUser.storyStatuses = nextStatuses;
@@ -1295,7 +1298,7 @@
           storyStatuses: fresh,
           lastStoryAt: fresh[0]?.createdAt || 0,
           updatedAt: Date.now(),
-          appVersion: "4.1.3"
+          appVersion: "4.1.4"
         }, { merge: true });
 
         currentUser.storyStatuses = fresh;
@@ -1362,7 +1365,7 @@
       lastActiveAt: now,
       presenceUpdatedAt: now,
       updatedAt: now,
-      appVersion: "4.1.3"
+      appVersion: "4.1.4"
     };
 
     if (!isOnline) payload.lastSeen = now;
@@ -1472,7 +1475,7 @@
       lastSeen: null,
       lastActiveAt: Date.now(),
       presenceUpdatedAt: Date.now(),
-      appVersion: "4.1.3",
+      appVersion: "4.1.4",
       createdAt: Date.now(),
       updatedAt: Date.now()
     };
@@ -1512,7 +1515,7 @@
           lastActiveAt: Date.now(),
           presenceUpdatedAt: Date.now(),
           updatedAt: Date.now(),
-          appVersion: "4.1.3"
+          appVersion: "4.1.4"
         }, { merge: true });
 
         localStorage.setItem("zappi_current_user", JSON.stringify(currentUser));
@@ -1539,6 +1542,7 @@
     document.getElementById("homeScreen").classList.add("active");
     document.getElementById("topUserName").innerText = currentUser.name;
     startPresenceTracking();
+    startGlobalIncomingCallListener();
     setTimeout(() => cleanupOldMessages(false), 1500);
     openTab("chats");
 
@@ -2215,7 +2219,7 @@
         await db.collection("users").doc(currentUser.id).set({
           statusText,
           updatedAt: Date.now(),
-          appVersion: "4.1.3"
+          appVersion: "4.1.4"
         }, { merge: true });
 
         await updateMyStatusInConversations(statusText);
@@ -2367,6 +2371,97 @@
       otherId,
       conversationId: getConversationId(currentUser.id, otherId)
     };
+  }
+
+  function stopGlobalCallListener() {
+    if (globalCallUnsubscribe) {
+      globalCallUnsubscribe();
+      globalCallUnsubscribe = null;
+    }
+  }
+
+  function isSameActiveChatUser(userId) {
+    if (!activeChat || !userId) return false;
+    const activeId = activeChat.contactUserId || (activeChat.phone ? "user_" + activeChat.phone : "");
+    return activeId === userId;
+  }
+
+  function startGlobalIncomingCallListener() {
+    if (!firebaseReady || !db || !currentUser) return;
+    if (globalCallUnsubscribe) return;
+
+    globalCallUnsubscribe = db.collection("conversations")
+      .where("participants", "array-contains", currentUser.id)
+      .onSnapshot(async snapshot => {
+        if (!currentUser || globalIncomingCallOpening) return;
+
+        for (const doc of snapshot.docs) {
+          const conv = doc.data() || {};
+          const call = conv.activeCall || null;
+          if (!call || !call.id) continue;
+          if (call.status !== "ringing") continue;
+          if (call.receiverId !== currentUser.id) continue;
+          if (currentCallId && currentCallId === call.id) continue;
+          if (handledGlobalIncomingCallIds[call.id]) continue;
+
+          const callerId = call.callerId || (conv.participants || []).find(id => id !== currentUser.id);
+          if (!callerId) continue;
+
+          // Se a conversa já está aberta com a mesma pessoa, o listener da conversa cuida da chamada.
+          if (isSameActiveChatUser(callerId)) continue;
+
+          handledGlobalIncomingCallIds[call.id] = true;
+          globalIncomingCallOpening = true;
+
+          try {
+            await loadContacts();
+            const callerUser = await getUserById(callerId);
+            const participantInfo = conv.participantInfo || {};
+            const fallback = participantInfo[callerId] || {};
+            const savedContact = contacts.find(c => {
+              const cId = c.contactUserId || (c.phone ? "user_" + c.phone : "");
+              return cId === callerId;
+            });
+
+            const incomingContact = savedContact || {
+              name: callerUser?.name || fallback.name || call.callerName || "Contato",
+              savedName: callerUser?.name || fallback.name || call.callerName || "Contato",
+              phone: callerUser?.phone || fallback.phone || "",
+              contactUserId: callerId,
+              photoUrl: callerUser?.photoUrl || fallback.photoUrl || "",
+              photoData: callerUser?.photoData || fallback.photoData || ""
+            };
+
+            await openChat(incomingContact);
+
+            // Reforço visual/sonoro: se o listener da conversa demorar um pouco, mostra a chamada mesmo assim.
+            if (!currentCallId) {
+              currentCallId = call.id;
+              currentCallRole = "receiver";
+              currentCallData = call;
+              currentCallMediaType = call.type || "audio";
+              addedRemoteCandidates = {};
+              remoteDescriptionApplied = false;
+              setCallOverlay({
+                title: "Ligação de " + callTypeLabel(call.type) + " de " + (call.callerName || incomingContact.name || "Contato"),
+                subtitle: "Chamada de " + callTypeLabel(call.type) + " recebida",
+                showAccept: true,
+                showDecline: true,
+                showEnd: false,
+                callType: call.type || "audio"
+              });
+              startCallRingtone();
+            }
+          } catch (error) {
+            console.error("Erro ao abrir chamada recebida fora da conversa:", error);
+            handledGlobalIncomingCallIds[call.id] = false;
+          } finally {
+            globalIncomingCallOpening = false;
+          }
+
+          break;
+        }
+      }, error => console.error("Erro ouvindo chamadas globais:", error));
   }
 
   function stopActiveCallListener() {
@@ -2932,6 +3027,7 @@
     markConversationAsRead();
     listenActiveChatPresence();
     listenTypingStatus();
+    startGlobalIncomingCallListener();
     listenActiveAudioCall();
     listenMessages();
 
@@ -4697,6 +4793,7 @@
 
     await setTypingStatus(false);
     await cleanupAudioCall(true);
+    stopGlobalCallListener();
     await setMyPresence(false);
 
     localStorage.removeItem("zappi_current_user");
@@ -4751,7 +4848,7 @@
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", async () => {
       try {
-        await navigator.serviceWorker.register("sw.js?v=201");
+        await navigator.serviceWorker.register("sw.js?v=202");
       } catch (error) {
         console.error(error);
       }
