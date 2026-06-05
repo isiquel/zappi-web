@@ -91,6 +91,7 @@
     .chat-name p{font-size:11px;opacity:.8;transition:.2s}
     .chat-name p.typing{color:#b8fff4;opacity:1;font-weight:800}
     .chat-name p.online{color:#b8fff4;opacity:1;font-weight:800}
+    .chat-clear-btn{height:38px;border-radius:999px;background:rgba(255,255,255,.16);color:#fff;padding:0 10px;font-size:12px;font-weight:900;display:flex;align-items:center;justify-content:center;gap:4px;flex-shrink:0;white-space:nowrap;border:1px solid rgba(255,255,255,.18)}
     .presence-dot{position:absolute;right:1px;bottom:1px;width:13px;height:13px;border-radius:50%;background:#25D366;border:2px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.08)}
     .avatar.small .presence-dot{width:11px;height:11px;right:0;bottom:0}
 
@@ -322,7 +323,7 @@
       </div>
 
       <div class="notice">
-        Versão 3.9.1: perfil mais limpo, sem mensagens técnicas, mantendo limpeza automática de 7 dias.
+        Versão 3.9.3: perfil mais limpo, sem mensagens técnicas, mantendo limpeza automática de 7 dias.
       </div>
     </div>
   </div>
@@ -354,6 +355,7 @@
         <h3 id="chatContactName">Contato</h3>
         <p id="chatContactPhone">telefone</p>
       </div>
+      <button class="chat-clear-btn" onclick="clearActiveConversationUnfavorited()" title="Limpar conversa">🧹 <span>Limpar</span></button>
     </div>
 
     <div id="chatSaveBar" class="chat-save-bar">
@@ -530,7 +532,7 @@
     if (!("serviceWorker" in navigator)) return null;
 
     try {
-      const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js?v=191", { scope: "/" });
+      const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js?v=193", { scope: "/" });
       await navigator.serviceWorker.ready;
       if (registration && registration.update) registration.update();
       return registration;
@@ -805,7 +807,7 @@
         storyStatuses: nextStatuses,
         lastStoryAt: item.createdAt,
         updatedAt: Date.now(),
-        appVersion: "3.9.1"
+        appVersion: "3.9.3"
       }, { merge: true });
 
       currentUser.storyStatuses = nextStatuses;
@@ -1128,7 +1130,7 @@
           storyStatuses: fresh,
           lastStoryAt: fresh[0]?.createdAt || 0,
           updatedAt: Date.now(),
-          appVersion: "3.9.1"
+          appVersion: "3.9.3"
         }, { merge: true });
 
         currentUser.storyStatuses = fresh;
@@ -1195,7 +1197,7 @@
       lastActiveAt: now,
       presenceUpdatedAt: now,
       updatedAt: now,
-      appVersion: "3.9.1"
+      appVersion: "3.9.3"
     };
 
     if (!isOnline) payload.lastSeen = now;
@@ -1305,7 +1307,7 @@
       lastSeen: null,
       lastActiveAt: Date.now(),
       presenceUpdatedAt: Date.now(),
-      appVersion: "3.9.1",
+      appVersion: "3.9.3",
       createdAt: Date.now(),
       updatedAt: Date.now()
     };
@@ -1345,7 +1347,7 @@
           lastActiveAt: Date.now(),
           presenceUpdatedAt: Date.now(),
           updatedAt: Date.now(),
-          appVersion: "3.9.1"
+          appVersion: "3.9.3"
         }, { merge: true });
 
         localStorage.setItem("zappi_current_user", JSON.stringify(currentUser));
@@ -2048,7 +2050,7 @@
         await db.collection("users").doc(currentUser.id).set({
           statusText,
           updatedAt: Date.now(),
-          appVersion: "3.9.1"
+          appVersion: "3.9.3"
         }, { merge: true });
 
         await updateMyStatusInConversations(statusText);
@@ -2143,6 +2145,7 @@
       <div class="small-actions">
         ${saved ? `<button class="btn-light" onclick="alert('Esse contato já está salvo.')">Contato salvo</button>` : `<button class="btn-primary" onclick="saveContactFromInfo()">Salvar contato</button>`}
         <button class="btn-light" onclick="copyActiveContactPhone()">Copiar telefone</button>
+        <button class="btn-danger" onclick="clearConversationFromInfo()">Limpar conversa</button>
       </div>
 
       <div class="contact-info-card">
@@ -2164,6 +2167,11 @@
   function closeContactInfo() {
     const overlay = document.getElementById("contactInfoOverlay");
     if (overlay) overlay.classList.remove("active");
+  }
+
+  async function clearConversationFromInfo() {
+    closeContactInfo();
+    await clearActiveConversationUnfavorited();
   }
 
   async function saveContactFromInfo() {
@@ -3190,6 +3198,113 @@
     }
   }
 
+
+  async function clearActiveConversationUnfavorited() {
+    if (!activeChat || !currentUser) return;
+
+    const ok = confirm(
+      "Limpar esta conversa?
+
+" +
+      "Isso vai apagar definitivamente do banco todas as mensagens NÃO favoritadas desta conversa.
+
+" +
+      "Mensagens favoritadas serão preservadas."
+    );
+
+    if (!ok) return;
+
+    const otherId = activeChat.contactUserId || ("user_" + activeChat.phone);
+    const conversationId = getConversationId(currentUser.id, otherId);
+
+    try {
+      if (firebaseReady && db) {
+        const convRef = db.collection("conversations").doc(conversationId);
+        const snap = await convRef.collection("messages").get();
+
+        if (snap.empty) {
+          alert("Não há mensagens para limpar nesta conversa.");
+          return;
+        }
+
+        const protectedDocs = [];
+        const docsToDelete = [];
+
+        snap.docs.forEach(doc => {
+          const data = doc.data() || {};
+          if (isProtectedMessage(data)) protectedDocs.push({ id: doc.id, ...data });
+          else docsToDelete.push(doc);
+        });
+
+        if (!docsToDelete.length) {
+          alert("Todas as mensagens desta conversa estão favoritadas/protegidas.");
+          return;
+        }
+
+        let batch = db.batch();
+        let count = 0;
+        let deleted = 0;
+
+        for (const doc of docsToDelete) {
+          batch.delete(doc.ref);
+          count++;
+          deleted++;
+
+          if (count >= 450) {
+            await batch.commit();
+            batch = db.batch();
+            count = 0;
+          }
+        }
+
+        if (count > 0) await batch.commit();
+
+        if (protectedDocs.length) {
+          protectedDocs.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+          const last = protectedDocs[0];
+          await convRef.set({
+            lastMessage: "★ " + getMessagePreview(last),
+            updatedAt: last.createdAt || Date.now(),
+            hasFavorite: true
+          }, { merge: true });
+        } else {
+          try {
+            await convRef.delete();
+          } catch (deleteConvError) {
+            console.warn("Não foi possível apagar o documento da conversa, limpando prévia:", deleteConvError);
+            await convRef.set({
+              lastMessage: "Conversa limpa",
+              updatedAt: Date.now(),
+              hasFavorite: false
+            }, { merge: true });
+          }
+        }
+
+        alert("Conversa limpa. Mensagens apagadas: " + deleted + ". Mensagens favoritadas preservadas: " + protectedDocs.length + ".");
+
+        if (!protectedDocs.length) {
+          closeChat();
+        } else {
+          markConversationAsRead();
+        }
+      } else {
+        const data = loadLocal();
+        const before = data.messages?.[conversationId] || [];
+        const after = before.filter(m => isProtectedMessage(m));
+        const deleted = before.length - after.length;
+        if (!data.messages) data.messages = {};
+        data.messages[conversationId] = after;
+        saveLocal(data);
+        currentMessagesCache = after;
+        renderMessages(after);
+        alert("Conversa limpa. Mensagens apagadas: " + deleted + ". Mensagens favoritadas preservadas: " + after.length + ".");
+      }
+    } catch (error) {
+      console.error("Erro ao limpar conversa:", error);
+      alert("Não foi possível limpar a conversa agora.");
+    }
+  }
+
   function openImageFull(url) {
     if (!url) return;
     document.getElementById("modalImage").src = url;
@@ -3933,7 +4048,7 @@
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", async () => {
       try {
-        await navigator.serviceWorker.register("sw.js?v=191");
+        await navigator.serviceWorker.register("sw.js?v=193");
       } catch (error) {
         console.error(error);
       }
