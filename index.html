@@ -167,7 +167,7 @@
       </div>
 
       <div class="notice">
-        Versão 2.7: agora mostra “digitando...” quando a outra pessoa está escrevendo.
+        Versão 2.8: “digitando...” corrigido em coleção separada.
       </div>
     </div>
   </div>
@@ -321,7 +321,7 @@
     if (!("serviceWorker" in navigator)) return null;
 
     try {
-      const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js?v=120", { scope: "/" });
+      const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js?v=130", { scope: "/" });
       await navigator.serviceWorker.ready;
       if (registration && registration.update) registration.update();
       return registration;
@@ -1099,15 +1099,17 @@
     const otherId = activeChat.contactUserId || ("user_" + activeChat.phone);
     const conversationId = getConversationId(currentUser.id, otherId);
 
-    const data = {};
-    data["typingBy." + currentUser.id] = {
-      typing: !!isTyping,
-      at: Date.now(),
-      name: currentUser.name || ""
-    };
-
     try {
-      await db.collection("conversations").doc(conversationId).set(data, { merge: true });
+      await db.collection("conversations")
+        .doc(conversationId)
+        .collection("typing")
+        .doc(currentUser.id)
+        .set({
+          userId: currentUser.id,
+          name: currentUser.name || "",
+          typing: !!isTyping,
+          at: Date.now()
+        }, { merge: true });
     } catch (error) {
       console.error("Erro ao atualizar digitando:", error);
     }
@@ -1138,29 +1140,38 @@
     const conversationId = getConversationId(currentUser.id, otherId);
     const phoneLine = document.getElementById("chatContactPhone");
 
-    typingUnsubscribe = db.collection("conversations").doc(conversationId).onSnapshot(doc => {
-      if (!activeChat || !doc.exists) return;
+    typingUnsubscribe = db.collection("conversations")
+      .doc(conversationId)
+      .collection("typing")
+      .doc(otherId)
+      .onSnapshot(doc => {
+        if (!activeChat || !phoneLine) return;
 
-      const data = doc.data() || {};
-      const typingBy = data.typingBy || {};
-      const otherTyping = typingBy[otherId];
+        clearTimeout(typingRevertTimeout);
 
-      clearTimeout(typingRevertTimeout);
+        if (doc.exists) {
+          const data = doc.data() || {};
+          const fresh = Date.now() - (data.at || 0) < 5000;
 
-      if (otherTyping && otherTyping.typing && Date.now() - (otherTyping.at || 0) < 5000) {
-        phoneLine.innerText = "digitando...";
-        phoneLine.classList.add("typing");
+          if (data.typing && fresh) {
+            phoneLine.innerText = "digitando...";
+            phoneLine.classList.add("typing");
 
-        typingRevertTimeout = setTimeout(() => {
-          if (!activeChat) return;
-          phoneLine.innerText = activeChat.phone || "";
-          phoneLine.classList.remove("typing");
-        }, 3500);
-      } else {
+            typingRevertTimeout = setTimeout(() => {
+              if (!activeChat || !phoneLine) return;
+              phoneLine.innerText = activeChat.phone || "";
+              phoneLine.classList.remove("typing");
+            }, 3500);
+
+            return;
+          }
+        }
+
         phoneLine.innerText = activeChat.phone || "";
         phoneLine.classList.remove("typing");
-      }
-    });
+      }, error => {
+        console.error("Erro ouvindo digitando:", error);
+      });
   }
 
   async function markConversationAsRead() {
@@ -1768,13 +1779,6 @@
       const readBy = {};
       readBy[currentUser.id] = Date.now();
 
-      const typingData = {};
-      typingData["typingBy." + currentUser.id] = {
-        typing: false,
-        at: Date.now(),
-        name: currentUser.name || ""
-      };
-
       await convRef.set({
         id: conversationId,
         participants: [currentUser.id, otherId],
@@ -1782,8 +1786,7 @@
         lastMessage: messageText,
         lastSenderId: currentUser.id,
         updatedAt: Date.now(),
-        readBy,
-        ...typingData
+        readBy
       }, { merge: true });
 
       const messageRef = await convRef.collection("messages").add(message);
@@ -2013,7 +2016,7 @@
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", async () => {
       try {
-        await navigator.serviceWorker.register("sw.js?v=120");
+        await navigator.serviceWorker.register("sw.js?v=130");
       } catch (error) {
         console.error(error);
       }
