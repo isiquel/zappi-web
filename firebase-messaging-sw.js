@@ -11,10 +11,9 @@ firebase.initializeApp({
 });
 
 const messaging = firebase.messaging();
-
 const APP_ORIGIN = "https://zappi-web.vercel.app";
 
-self.addEventListener("install", (event) => {
+self.addEventListener("install", () => {
   self.skipWaiting();
 });
 
@@ -22,10 +21,8 @@ self.addEventListener("activate", (event) => {
   event.waitUntil(self.clients.claim());
 });
 
-function getFullUrl(rawUrl) {
-  if (!rawUrl) {
-    return APP_ORIGIN + "/";
-  }
+function fullUrl(rawUrl) {
+  if (!rawUrl) return APP_ORIGIN + "/";
 
   const value = String(rawUrl);
 
@@ -51,61 +48,52 @@ messaging.onBackgroundMessage((payload) => {
     payload.notification?.body ||
     "Você recebeu uma nova mensagem.";
 
-  const url = getFullUrl(
+  const url = fullUrl(
     payload.data?.url ||
     payload.data?.click_action ||
     payload.fcmOptions?.link ||
     "/"
   );
 
-  const options = {
+  self.registration.showNotification(title, {
     body,
     icon: "/icon-192.png",
     badge: "/icon-192.png",
-    image: "/icon-192.png",
     tag: "zappi-message-" + Date.now(),
     renotify: true,
     requireInteraction: true,
     silent: false,
     vibrate: [300, 120, 300, 120, 300],
     data: {
-      url,
-      click_action: url
-    },
-    actions: [
-      {
-        action: "open_chat",
-        title: "Abrir conversa"
-      }
-    ]
-  };
-
-  self.registration.showNotification(title, options);
+      url
+    }
+  });
 });
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
 
-  const urlToOpen = getFullUrl(
-    event.notification?.data?.url ||
-    event.notification?.data?.click_action ||
-    "/"
-  );
+  const targetUrl = fullUrl(event.notification?.data?.url || "/");
 
   event.waitUntil(
     (async () => {
-      const windowClients = await clients.matchAll({
+      const allClients = await clients.matchAll({
         type: "window",
         includeUncontrolled: true
       });
 
-      for (const client of windowClients) {
+      for (const client of allClients) {
         try {
           const clientUrl = new URL(client.url);
 
           if (clientUrl.origin === APP_ORIGIN) {
+            client.postMessage({
+              type: "ZAPPI_OPEN_URL",
+              url: targetUrl
+            });
+
             if ("navigate" in client) {
-              await client.navigate(urlToOpen);
+              await client.navigate(targetUrl);
             }
 
             if ("focus" in client) {
@@ -115,13 +103,15 @@ self.addEventListener("notificationclick", (event) => {
             return;
           }
         } catch (error) {
-          console.error("Erro ao focar janela existente:", error);
+          console.error("Erro ao tentar abrir janela existente:", error);
         }
       }
 
       if (clients.openWindow) {
-        await clients.openWindow(urlToOpen);
+        return clients.openWindow(targetUrl);
       }
+
+      return null;
     })()
   );
 });
