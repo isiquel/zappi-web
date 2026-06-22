@@ -114,3 +114,19 @@ self.addEventListener("notificationclick", (event) => {
     })()
   );
 });
+import { initializeApp } from "firebase/app";
+import { getDatabase } from "firebase/database";
+
+const firebaseConfig = {
+  apiKey: "SUA_API_KEY",
+  authDomain: "zappi-web.firebaseapp.com",
+  databaseURL: "https://zappi-web-default-rtdb.firebaseio.com",
+  projectId: "zappi-web",
+  storageBucket: "zappi-web.firebasestorage.app",
+  messagingSenderId: "675790989502",
+  appId: "1:675790989502:web:36a7f3d1bcbb3bfb1b96ef"
+};
+
+const app = initializeApp(firebaseConfig);
+
+export const db = getDatabase(app);
