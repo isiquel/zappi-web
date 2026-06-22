@@ -13,6 +13,10 @@ firebase.initializeApp({
 const messaging = firebase.messaging();
 const APP_ORIGIN = "https://zappi-web.vercel.app";
 
+/* =========================
+   CICLO DO SERVICE WORKER
+========================= */
+
 self.addEventListener("install", (event) => {
   self.skipWaiting();
 });
@@ -20,6 +24,10 @@ self.addEventListener("install", (event) => {
 self.addEventListener("activate", (event) => {
   event.waitUntil(self.clients.claim());
 });
+
+/* =========================
+   FUNÇÃO DE URL SEGURA
+========================= */
 
 function fullUrl(rawUrl) {
   if (!rawUrl) return APP_ORIGIN + "/";
@@ -37,45 +45,72 @@ function fullUrl(rawUrl) {
   return APP_ORIGIN + "/" + value;
 }
 
+/* =========================
+   PUSH EM SEGUNDO PLANO
+========================= */
+
 messaging.onBackgroundMessage((payload) => {
-  const title =
-    payload.data?.title ||
-    payload.notification?.title ||
-    "Nova mensagem no Zappi Web";
+  const data = payload.data || {};
 
-  const body =
-    payload.data?.body ||
-    payload.notification?.body ||
-    "Você recebeu uma nova mensagem.";
+  const chatId = data.chatId || "geral";
+  const title = data.title || "Nova mensagem";
+  const body = data.body || "Você recebeu uma mensagem";
 
-  const url = fullUrl(
-    payload.data?.url ||
-    payload.data?.click_action ||
-    payload.fcmOptions?.link ||
-    "/"
-  );
+  const priority = data.priority || "normal";
+
+  const url = fullUrl(data.url || `/chat/${chatId}`);
+
+  // 👉 AGRUPA POR CONVERSA (tipo WhatsApp)
+  const tag = "chat-" + chatId;
 
   self.registration.showNotification(title, {
-    body,
+    body: body,
     icon: "/icon-192.png",
     badge: "/icon-192.png",
-    tag: "zappi-message-" + Date.now(),
+
+    tag: tag,
     renotify: true,
-    requireInteraction: true,
-    silent: false,
-    vibrate: [300, 120, 300, 120, 300],
+
+    requireInteraction: priority === "high",
+    silent: priority === "low",
+
+    vibrate:
+      priority === "high"
+        ? [300, 120, 300, 120, 300]
+        : [200],
+
     data: {
-      url
+      url: url,
+      chatId: chatId
     }
   });
 });
 
+/* =========================
+   CLIQUE NA NOTIFICAÇÃO
+========================= */
+
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
 
-  const urlToOpen = fullUrl(event.notification?.data?.url || "/");
+  const data = event.notification.data || {};
+  const urlToOpen = fullUrl(data.url || "/");
 
   event.waitUntil(
-    clients.openWindow(urlToOpen)
+    (async () => {
+      const allClients = await clients.matchAll({
+        type: "window",
+        includeUncontrolled: true
+      });
+
+      // 👉 se já estiver aberto, só foca
+      for (const client of allClients) {
+        if (client.url.includes(data.chatId) && "focus" in client) {
+          return client.focus();
+        }
+      }
+
+      return clients.openWindow(urlToOpen);
+    })()
   );
 });
