@@ -1,22 +1,20 @@
 const admin = require("firebase-admin");
 
 function initFirebaseAdmin() {
-  if (admin.apps.length) {
-    return admin.app();
-  }
+  if (admin.apps.length) return admin.app();
 
   const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT;
 
   if (!serviceAccountJson) {
-    throw new Error("FIREBASE_SERVICE_ACCOUNT não configurado na Vercel.");
+    throw new Error("FIREBASE_SERVICE_ACCOUNT não configurado.");
   }
 
   let serviceAccount;
 
   try {
     serviceAccount = JSON.parse(serviceAccountJson);
-  } catch (error) {
-    throw new Error("FIREBASE_SERVICE_ACCOUNT não é um JSON válido.");
+  } catch {
+    throw new Error("FIREBASE_SERVICE_ACCOUNT inválido.");
   }
 
   if (serviceAccount.private_key) {
@@ -24,7 +22,7 @@ function initFirebaseAdmin() {
   }
 
   return admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount)
+    credential: admin.credential.cert(serviceAccount),
   });
 }
 
@@ -33,17 +31,10 @@ function buildAbsoluteUrl(url) {
 
   if (!url) return baseUrl + "/";
 
-  const value = String(url);
+  if (url.startsWith("http")) return url;
+  if (url.startsWith("/")) return baseUrl + url;
 
-  if (value.startsWith("http://") || value.startsWith("https://")) {
-    return value;
-  }
-
-  if (value.startsWith("/")) {
-    return baseUrl + value;
-  }
-
-  return baseUrl + "/" + value;
+  return baseUrl + "/" + url;
 }
 
 module.exports = async function handler(req, res) {
@@ -51,15 +42,9 @@ module.exports = async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
-  if (req.method === "OPTIONS") {
-    return res.status(200).end();
-  }
-
+  if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") {
-    return res.status(405).json({
-      ok: false,
-      error: "Método não permitido."
-    });
+    return res.status(405).json({ ok: false, error: "Método não permitido." });
   }
 
   try {
@@ -67,82 +52,72 @@ module.exports = async function handler(req, res) {
 
     const { tokens, title, body, url, type } = req.body || {};
 
-    if (!tokens || !Array.isArray(tokens) || tokens.length === 0) {
-      return res.status(400).json({
-        ok: false,
-        error: "Nenhum token informado."
-      });
+    if (!Array.isArray(tokens) || tokens.length === 0) {
+      return res.status(400).json({ ok: false, error: "Tokens inválidos." });
     }
 
-    const validTokens = tokens.filter(Boolean);
-
-    const finalTitle = String(title || "Nova mensagem");
-    const finalBody = String(body || "Você recebeu uma notificação.");
+    const finalTitle = String(title || "Zappi Web");
+    const finalBody = String(body || "Nova notificação");
     const finalUrl = buildAbsoluteUrl(url || "/");
 
     const isCall = type === "call";
 
     const message = {
-      tokens: validTokens,
+      tokens,
 
       notification: {
         title: finalTitle,
-        body: finalBody
+        body: finalBody,
       },
 
       data: {
         title: finalTitle,
         body: finalBody,
         url: finalUrl,
-        type: isCall ? "incoming_call" : "message",
-        click_action: finalUrl
+        type: type || "message",
       },
 
+      // 🔥 ANDROID (AQUI É O QUE MELHORA O "TOQUE")
       android: {
-        priority: isCall ? "high" : "normal",
+        priority: "high",
         notification: {
-          sound: isCall ? "default" : "default",
-          priority: "max",
-          channelId: isCall ? "calls" : "messages",
-          sticky: isCall,
-          vibrateTimingsMillis: isCall
-            ? [0, 1000, 500, 1000, 500, 1000]
-            : [0, 300],
-          visibility: "public"
-        }
+          sound: "default",
+          channelId: isCall ? "call_channel" : "message_channel",
+        },
       },
 
       webpush: {
         headers: {
-          Urgency: isCall ? "high" : "normal"
+          Urgency: "high",
         },
 
         fcmOptions: {
-          link: finalUrl
+          link: finalUrl,
         },
 
         notification: {
           title: finalTitle,
           body: finalBody,
-
           icon: "/icon-192.png",
           badge: "/icon-192.png",
 
-          requireInteraction: isCall,
-          renotify: true,
-          silent: false,
+          requireInteraction: true,
 
-          tag: isCall ? "incoming-call" : "message",
-
+          // 🔥 vibração mais forte (simula "chamada")
           vibrate: isCall
-            ? [1000, 500, 1000, 500, 1000]
-            : [200],
+            ? [500, 200, 500, 200, 500, 200, 800]
+            : [200, 100, 200],
+
+          tag: isCall ? "call" : "message",
+
+          renotify: true,
 
           data: {
-            url: finalUrl
-          }
-        }
-      }
+            url: finalUrl,
+            type,
+          },
+        },
+      },
     };
 
     const response = await admin.messaging().sendEachForMulticast(message);
@@ -151,18 +126,9 @@ module.exports = async function handler(req, res) {
       ok: true,
       successCount: response.successCount,
       failureCount: response.failureCount,
-      responses: response.responses.map(r => ({
-        success: r.success,
-        error: r.error ? r.error.message : null
-      }))
     });
-
   } catch (error) {
-    console.error("Erro ao enviar notificação:", error);
-
-    return res.status(500).json({
-      ok: false,
-      error: error.message || "Erro interno ao enviar notificação."
-    });
+    console.error(error);
+    return res.status(500).json({ ok: false, error: error.message });
   }
 };
