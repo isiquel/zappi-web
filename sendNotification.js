@@ -1,7 +1,9 @@
 const admin = require("firebase-admin");
 
 function initFirebaseAdmin() {
-  if (admin.apps.length) return admin.app();
+  if (admin.apps.length) {
+    return admin.app();
+  }
 
   const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT;
 
@@ -30,10 +32,18 @@ function buildAbsoluteUrl(url) {
   const baseUrl = "https://zappi-web.vercel.app";
 
   if (!url) return baseUrl + "/";
-  if (url.startsWith("http")) return url;
-  if (url.startsWith("/")) return baseUrl + url;
 
-  return baseUrl + "/" + url;
+  const value = String(url);
+
+  if (value.startsWith("http://") || value.startsWith("https://")) {
+    return value;
+  }
+
+  if (value.startsWith("/")) {
+    return baseUrl + value;
+  }
+
+  return baseUrl + "/" + value;
 }
 
 module.exports = async function handler(req, res) {
@@ -41,7 +51,9 @@ module.exports = async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
-  if (req.method === "OPTIONS") return res.status(200).end();
+  if (req.method === "OPTIONS") {
+    return res.status(200).end();
+  }
 
   if (req.method !== "POST") {
     return res.status(405).json({
@@ -53,9 +65,9 @@ module.exports = async function handler(req, res) {
   try {
     initFirebaseAdmin();
 
-    const { tokens, title, body, url, type } = req.body || {};
+    const { tokens, title, body, url } = req.body || {};
 
-    if (!Array.isArray(tokens) || tokens.length === 0) {
+    if (!tokens || !Array.isArray(tokens) || tokens.length === 0) {
       return res.status(400).json({
         ok: false,
         error: "Nenhum token informado."
@@ -64,35 +76,86 @@ module.exports = async function handler(req, res) {
 
     const validTokens = tokens.filter(Boolean);
 
-    const finalTitle = String(title || "Nova notificação");
-    const finalBody = String(body || "");
-    const finalUrl = buildAbsoluteUrl(url || "/");
+    if (!validTokens.length) {
+      return res.status(400).json({
+        ok: false,
+        error: "Tokens inválidos."
+      });
+    }
 
-    const isCall = type === "call";
+    const finalTitle = String(title || "📞 Chamada recebida");
+    const finalBody = String(body || "Você está recebendo uma chamada.");
+    const finalUrl = buildAbsoluteUrl(url || "/");
 
     const message = {
       tokens: validTokens,
 
-      // 🔥 IMPORTANTE: sempre DATA-ONLY (melhor para background)
+      notification: {
+        title: finalTitle,
+        body: finalBody
+      },
+
       data: {
         title: finalTitle,
         body: finalBody,
         url: finalUrl,
-        type: type || "message",
-        priority: isCall ? "high" : "normal"
+        type: "call",
+        sound: "ringtone.mp3"
       },
 
       android: {
         priority: "high",
-        ttl: 60000
+        notification: {
+          sound: "ringtone.mp3",
+          channelId: "call_channel",
+          priority: "max",
+          defaultVibrateTimings: false,
+          vibrateTimings: [0, 1000, 500, 1000, 500, 1000],
+          visibility: "public"
+        }
+      },
+
+      apns: {
+        headers: {
+          "apns-priority": "10"
+        },
+        payload: {
+          aps: {
+            sound: "ringtone.mp3",
+            category: "CALL",
+            contentAvailable: true,
+            mutableContent: true
+          }
+        }
       },
 
       webpush: {
         headers: {
           Urgency: "high"
         },
+
         fcmOptions: {
           link: finalUrl
+        },
+
+        notification: {
+          title: finalTitle,
+          body: finalBody,
+
+          icon: "/icon-192.png",
+          badge: "/icon-192.png",
+
+          requireInteraction: true,
+          silent: false,
+
+          vibrate: [
+            1000, 500, 1000, 500, 1000, 500, 1000
+          ],
+
+          data: {
+            url: finalUrl,
+            sound: "/ringtone.mp3"
+          }
         }
       }
     };
@@ -103,7 +166,7 @@ module.exports = async function handler(req, res) {
       ok: true,
       successCount: response.successCount,
       failureCount: response.failureCount,
-      results: response.responses.map(r => ({
+      responses: response.responses.map(r => ({
         success: r.success,
         error: r.error ? r.error.message : null
       }))
@@ -114,7 +177,7 @@ module.exports = async function handler(req, res) {
 
     return res.status(500).json({
       ok: false,
-      error: error.message || "Erro interno"
+      error: error.message || "Erro interno ao enviar notificação."
     });
   }
 };
