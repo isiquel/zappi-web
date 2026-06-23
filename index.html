@@ -4897,7 +4897,63 @@
 </script>
 
 <script>
-/* ===== GRUPOS LISTA VISUAL ===== */
+
+/* ===== ZAPPI GROUPS INTEGRATION PATCH ===== */
+window.zappiGroups = window.zappiGroups || JSON.parse(localStorage.getItem("zappi_groups")||"[]");
+
+function saveGroups(){ localStorage.setItem("zappi_groups", JSON.stringify(window.zappiGroups||[])); }
+
+async function createGroupWithUsers(groupName, users=[]){
+  const group={
+    id:"group_"+Date.now(),
+    type:"group",
+    isGroup:true,
+    name:groupName,
+    participants:[currentUser?.id,...users],
+    createdAt:Date.now(),
+    updatedAt:Date.now(),
+    lastMessage:""
+  };
+  window.zappiGroups.unshift(group);
+  saveGroups();
+  renderGroupsInConversationList();
+  return group.id;
+}
+
+function openGroupChat(group){
+  window.activeChat = group;
+  try{
+    const el=document.getElementById("chatContactName");
+    if(el) el.textContent=group.name;
+    const p=document.getElementById("chatContactPhone");
+    if(p) p.textContent=(group.participants||[]).length+" participantes";
+  }catch(e){}
+  if(typeof openChat==="function" && openChat!==openGroupChat){
+    try{ openChat(group); }catch(e){}
+  }
+}
+
+function renderGroupsInConversationList(){
+  const title = Array.from(document.querySelectorAll("*"))
+   .find(el => (el.textContent||"").includes("CONVERSAS RECENTES"));
+  if(!title) return;
+  let container=document.getElementById("groupsContainer");
+  if(!container){
+    container=document.createElement("div");
+    container.id="groupsContainer";
+    title.parentNode.insertBefore(container,title.nextSibling);
+  }
+  container.innerHTML=(window.zappiGroups||[]).map(g=>`
+   <div onclick="openGroupChat(window.zappiGroups.find(x=>x.id==='${g.id}'))"
+    style="padding:12px;border-bottom:1px solid #eee;cursor:pointer">
+    👥 <strong>${g.name}</strong><br>
+    <small>${(g.participants||[]).length} participantes</small>
+   </div>`).join("");
+}
+
+window.addEventListener("load", renderGroupsInConversationList);
+
+/* ===== GRUPOS LISTA VISUAL LEGACY ===== */
 window.zappiGroups = window.zappiGroups || [];
 
 async function createGroupWithUsers(groupName, users=[]){
