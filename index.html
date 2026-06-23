@@ -4895,5 +4895,95 @@
     await checkExistingProfile();
   })();
 </script>
+
+<script>
+/* ===== ZAPPI GROUPS BASE v1 ===== */
+let activeGroup = null;
+
+async function createGroup(groupName, participants = []) {
+  if (!firebaseReady || !db || !currentUser) return;
+  const ref = await db.collection("groups").add({
+    name: groupName,
+    createdBy: currentUser.id,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    admins: [currentUser.id],
+    participants: [currentUser.id, ...participants],
+    photoData: ""
+  });
+  return ref.id;
+}
+
+async function openGroup(groupId) {
+  activeGroup = groupId;
+  listenGroupMessages(groupId);
+}
+
+function listenGroupMessages(groupId) {
+  return db.collection("groups")
+    .doc(groupId)
+    .collection("messages")
+    .orderBy("createdAt","asc")
+    .onSnapshot(() => {
+      console.log("Grupo atualizado:", groupId);
+    });
+}
+
+async function sendGroupMessage(groupId, payload) {
+  if (!groupId) return;
+  await db.collection("groups")
+    .doc(groupId)
+    .collection("messages")
+    .add({
+      ...payload,
+      senderId: currentUser.id,
+      senderName: currentUser.name,
+      createdAt: Date.now()
+    });
+}
+/* ===== END GROUPS BASE ===== */
+</script>
+
+
+<script>
+/* ===== ZAPPI GROUP UI v2 ===== */
+
+async function createGroupWithUsers(groupName, users){
+  const groupId = await createGroup(groupName, users);
+  alert("Grupo criado com sucesso!");
+  return groupId;
+}
+
+async function addGroupMember(groupId, userId){
+  await db.collection("groups").doc(groupId).set({
+    participants: firebase.firestore.FieldValue.arrayUnion(userId),
+    updatedAt: Date.now()
+  }, {merge:true});
+}
+
+async function removeGroupMember(groupId, userId){
+  await db.collection("groups").doc(groupId).set({
+    participants: firebase.firestore.FieldValue.arrayRemove(userId),
+    updatedAt: Date.now()
+  }, {merge:true});
+}
+
+async function leaveGroup(groupId){
+  await removeGroupMember(groupId, currentUser.id);
+}
+
+function listenGroupsList(){
+  if(!currentUser) return;
+
+  return db.collection("groups")
+    .where("participants","array-contains",currentUser.id)
+    .onSnapshot((snap)=>{
+      console.log("Grupos carregados:", snap.size);
+    });
+}
+
+/* ===== END GROUP UI ===== */
+</script>
+
 </body>
 </html>
