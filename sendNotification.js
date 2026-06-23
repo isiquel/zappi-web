@@ -11,13 +11,7 @@ function initFirebaseAdmin() {
     throw new Error("FIREBASE_SERVICE_ACCOUNT não configurado na Vercel.");
   }
 
-  let serviceAccount;
-
-  try {
-    serviceAccount = JSON.parse(serviceAccountJson);
-  } catch (error) {
-    throw new Error("FIREBASE_SERVICE_ACCOUNT não é um JSON válido.");
-  }
+  const serviceAccount = JSON.parse(serviceAccountJson);
 
   if (serviceAccount.private_key) {
     serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, "\n");
@@ -33,17 +27,11 @@ function buildAbsoluteUrl(url) {
 
   if (!url) return baseUrl + "/";
 
-  const value = String(url);
+  if (url.startsWith("http")) return url;
 
-  if (value.startsWith("http://") || value.startsWith("https://")) {
-    return value;
-  }
+  if (url.startsWith("/")) return baseUrl + url;
 
-  if (value.startsWith("/")) {
-    return baseUrl + value;
-  }
-
-  return baseUrl + "/" + value;
+  return baseUrl + "/" + url;
 }
 
 module.exports = async function handler(req, res) {
@@ -56,77 +44,32 @@ module.exports = async function handler(req, res) {
   }
 
   if (req.method !== "POST") {
-    return res.status(405).json({
-      ok: false,
-      error: "Método não permitido."
-    });
+    return res.status(405).json({ ok: false, error: "Método não permitido" });
   }
 
   try {
     initFirebaseAdmin();
 
-    const { tokens, title, body, url } = req.body || {};
+    const { tokens, title, body, url, photo, username } = req.body || {};
 
-    if (!tokens || !Array.isArray(tokens) || tokens.length === 0) {
-      return res.status(400).json({
-        ok: false,
-        error: "Nenhum token informado."
-      });
+    if (!tokens?.length) {
+      return res.status(400).json({ ok: false, error: "Sem tokens" });
     }
 
-    const validTokens = tokens.filter(Boolean);
-
-    if (!validTokens.length) {
-      return res.status(400).json({
-        ok: false,
-        error: "Tokens inválidos."
-      });
-    }
-
-    const finalTitle = String(title || "📞 Chamada recebida");
-    const finalBody = String(body || "Você está recebendo uma chamada.");
+    const finalTitle = username || title || "Novo contato";
+    const finalBody = body || "Enviou uma mensagem";
     const finalUrl = buildAbsoluteUrl(url || "/");
 
     const message = {
-      tokens: validTokens,
-
-      notification: {
-        title: finalTitle,
-        body: finalBody
-      },
+      tokens,
 
       data: {
         title: finalTitle,
         body: finalBody,
         url: finalUrl,
-        type: "call",
-        sound: "ringtone.mp3"
-      },
-
-      android: {
-        priority: "high",
-        notification: {
-          sound: "ringtone.mp3",
-          channelId: "call_channel",
-          priority: "max",
-          defaultVibrateTimings: false,
-          vibrateTimings: [0, 1000, 500, 1000, 500, 1000],
-          visibility: "public"
-        }
-      },
-
-      apns: {
-        headers: {
-          "apns-priority": "10"
-        },
-        payload: {
-          aps: {
-            sound: "ringtone.mp3",
-            category: "CALL",
-            contentAvailable: true,
-            mutableContent: true
-          }
-        }
+        photo: photo || "/icon-192.png",
+        username: finalTitle,
+        type: "message"
       },
 
       webpush: {
@@ -134,27 +77,19 @@ module.exports = async function handler(req, res) {
           Urgency: "high"
         },
 
-        fcmOptions: {
-          link: finalUrl
-        },
-
         notification: {
           title: finalTitle,
           body: finalBody,
 
-          icon: "/icon-192.png",
+          icon: photo || "/icon-192.png",
           badge: "/icon-192.png",
 
           requireInteraction: true,
-          silent: false,
-
-          vibrate: [
-            1000, 500, 1000, 500, 1000, 500, 1000
-          ],
 
           data: {
             url: finalUrl,
-            sound: "/ringtone.mp3"
+            photo: photo || "/icon-192.png",
+            username: finalTitle
           }
         }
       }
@@ -164,20 +99,12 @@ module.exports = async function handler(req, res) {
 
     return res.status(200).json({
       ok: true,
-      successCount: response.successCount,
-      failureCount: response.failureCount,
-      responses: response.responses.map(r => ({
-        success: r.success,
-        error: r.error ? r.error.message : null
-      }))
+      success: response.successCount,
+      failure: response.failureCount
     });
 
-  } catch (error) {
-    console.error("Erro ao enviar notificação:", error);
-
-    return res.status(500).json({
-      ok: false,
-      error: error.message || "Erro interno ao enviar notificação."
-    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ ok: false, error: err.message });
   }
 };
