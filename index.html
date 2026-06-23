@@ -1945,7 +1945,6 @@
       <div class="small-actions" style="margin-bottom:14px;">
         <button class="btn-light" onclick="renderChats()">Atualizar conversas</button>
         <button class="btn-primary" onclick="openTab('contacts')">Adicionar contato</button>
-        <button class="btn-primary" onclick="openCreateGroupModal()">Novo grupo</button>
       </div>
 
       <div class="section-title">Conversas recentes</div>
@@ -4898,11 +4897,52 @@
 </script>
 
 <script>
+/* ===== GRUPOS LISTA VISUAL ===== */
+window.zappiGroups = window.zappiGroups || [];
+
+async function createGroupWithUsers(groupName, users=[]){
+  const group = {
+    id: "group_" + Date.now(),
+    name: groupName,
+    participants: users,
+    createdAt: Date.now()
+  };
+
+  zappiGroups.unshift(group);
+  renderGroupsInConversationList();
+
+  alert("Grupo criado: " + groupName);
+  return group.id;
+}
+
+function renderGroupsInConversationList(){
+  const title = Array.from(document.querySelectorAll("*"))
+    .find(el => (el.textContent || "").includes("CONVERSAS RECENTES"));
+
+  if(!title) return;
+
+  let container = document.getElementById("groupsContainer");
+
+  if(!container){
+    container = document.createElement("div");
+    container.id = "groupsContainer";
+    title.parentNode.insertBefore(container, title.nextSibling);
+  }
+
+  container.innerHTML = zappiGroups.map(g => `
+    <div style="padding:12px;border-bottom:1px solid #eee;cursor:pointer">
+      👥 <strong>${g.name}</strong><br>
+      <small>${g.participants.length + 1} participantes</small>
+    </div>
+  `).join("");
+}
+
 function openCreateGroupModal(){
-  const groupName = prompt("Nome do grupo:");
-  if(!groupName) return;
-  alert("Grupo '"+groupName+"' criado. Próxima etapa: seleção de participantes.");
+  const nome = prompt("Nome do grupo:");
+  if(!nome) return;
+  createGroupWithUsers(nome, []);
 }
 </script>
+
 </body>
 </html>
