@@ -11,66 +11,66 @@ firebase.initializeApp({
 });
 
 const messaging = firebase.messaging();
-const APP_ORIGIN = "https://zappi-web.vercel.app";
 
-self.addEventListener("install", () => {
-  self.skipWaiting();
-});
-
-self.addEventListener("activate", (event) => {
-  event.waitUntil(self.clients.claim());
-});
-
-function fullUrl(rawUrl) {
-  if (!rawUrl) return APP_ORIGIN + "/";
-
-  const value = String(rawUrl);
-
-  if (value.startsWith("http://") || value.startsWith("https://")) {
-    return value;
-  }
-
-  if (value.startsWith("/")) {
-    return APP_ORIGIN + value;
-  }
-
-  return APP_ORIGIN + "/" + value;
-}
+/* =========================
+   BACKGROUND HANDLER FOR CALLS
+========================= */
 
 messaging.onBackgroundMessage((payload) => {
   const data = payload.data || {};
 
-  const chatId = data.chatId || "geral";
-  const title = data.title || "Nova mensagem";
-  const body = data.body || "Você recebeu uma mensagem";
-  const priority = data.priority || "normal";
+  const isCall = data.type === "call";
 
-  const url = fullUrl(data.url || `/chat/${chatId}`);
+  const title = isCall
+    ? "📞 Chamada recebida"
+    : (data.title || "Nova mensagem");
+
+  const body = data.body || "";
 
   self.registration.showNotification(title, {
-    body,
+    body: body,
     icon: "/icon-192.png",
     badge: "/icon-192.png",
-    tag: "chat-" + chatId,
+
+    // 🔥 ESSENCIAL PARA NÃO “SUMIR”
+    requireInteraction: true,
+
+    // 🔥 NÃO SILENCIAR
+    silent: false,
+
+    // 🔥 TAG EVITA AGRUPAR ERRADO
+    tag: isCall ? "incoming-call" : "message",
+
     renotify: true,
-    requireInteraction: priority === "high",
-    silent: priority === "low",
-    vibrate:
-      priority === "high"
-        ? [300, 120, 300, 120, 300]
-        : [200],
+
+    // 🔥 VIBRAÇÃO FORTE ESTILO CHAMADA
+    vibrate: isCall
+      ? [
+          800, 200,
+          800, 200,
+          800, 200,
+          1000
+        ]
+      : [
+          300
+        ],
+
     data: {
-      url,
-      chatId
+      url: data.url || "/",
+      type: data.type
     }
   });
 });
 
-self.addEventListener("notificationclick", (event) => {
+/* =========================
+   CLICK NA NOTIFICAÇÃO
+========================= */
+
+self.addEventListener("notificationclick", function (event) {
   event.notification.close();
 
   const data = event.notification.data || {};
-  const urlToOpen = fullUrl(data.url || "/");
+  const url = data.url || "/";
 
   event.waitUntil(
     (async () => {
@@ -80,16 +80,16 @@ self.addEventListener("notificationclick", (event) => {
       });
 
       for (const client of allClients) {
-        if (
-          data.chatId &&
-          client.url.includes(data.chatId) &&
-          "focus" in client
-        ) {
-          return client.focus();
+        if (client.url.includes(self.location.origin) && "focus" in client) {
+          client.focus();
+          client.navigate(url);
+          return;
         }
       }
 
-      return clients.openWindow(urlToOpen);
+      if (clients.openWindow) {
+        return clients.openWindow(url);
+      }
     })()
   );
 });
