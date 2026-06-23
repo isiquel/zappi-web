@@ -146,7 +146,7 @@
     .chat-body.with-edit{bottom:132px}
 
     .msg{max-width:78%;padding:10px 12px;border-radius:14px;font-size:14px;line-height:1.35;box-shadow:0 1px 2px rgba(0,0,0,.12);word-wrap:break-word;flex-shrink:0;position:relative}
-    .msg.me{align-self:flex-end;background:#d9fdd3;border-bottom-right-radius:4px}
+    .msg.me {align-self:flex-end;background:#d9fdd3;border-bottom-right-radius:4px}
     .msg.other{align-self:flex-start;background:white;border-bottom-left-radius:4px}
     .msg small{display:flex;justify-content:flex-end;align-items:center;gap:4px;text-align:right;font-size:10px;opacity:.75;margin-top:4px;padding-right:22px}
     .msg-status{font-size:12px;font-weight:900;letter-spacing:-2px;color:#777;margin-left:3px}
@@ -992,7 +992,6 @@
     clearTimeout(statusViewerTimer);
     statusViewerTimer = null;
   }
-
 
   function statusArrayCount(arr) {
     return Array.isArray(arr) ? arr.length : 0;
@@ -1908,7 +1907,7 @@
 
     await saveContactData(name, phone, activeChat.contactUserId || "");
     updateSaveContactBar();
-    alert("Contato salvo.");
+    alert("Contato saved.");
   }
 
   function updateSaveContactBar() {
@@ -2009,6 +2008,7 @@
 
     list.innerHTML = `<div class="list">${filtered.map(c => conversationItemHtml(c)).join("")}</div>`;
   }
+
   function listenConversations() {
     stopConversationListener();
     firstConversationSnapshot = true;
@@ -2291,13 +2291,13 @@
     return [userA, userB].sort().join("_");
   }
 
-  function getActiveContactInfo() {
-    if (!activeChat) return null;
+  function getContactInfo(contact) {
+    if (!contact) return null;
 
-    const name = activeChat.name || activeChat.savedName || activeChatPresence?.name || "Contato";
-    const phone = activeChat.phone || activeChatPresence?.phone || "";
-    const photo = activeChatPresence?.photoData || activeChatPresence?.photoUrl || activeChat.photoData || activeChat.photoUrl || "";
-    const statusText = activeChatPresence?.statusText || activeChat.statusText || "Sem status definido";
+    const name = contact.name || contact.savedName || activeChatPresence?.name || "Contato";
+    const phone = contact.phone || activeChatPresence?.phone || "";
+    const photo = activeChatPresence?.photoData || activeChatPresence?.photoUrl || contact.photoData || contact.photoUrl || "";
+    const statusText = activeChatPresence?.statusText || contact.statusText || "Sem status definido";
 
     return { name, phone, photo, statusText };
   }
@@ -2309,7 +2309,7 @@
     const box = document.getElementById("contactInfoContent");
     if (!overlay || !box) return;
 
-    const info = getActiveContactInfo();
+    const info = getContactInfo(activeChat);
     const saved = isContactSaved(activeChat);
     const onlineText = getChatStatusText() || info.phone || "";
     const favoriteMessages = (currentMessagesCache || []).filter(m => {
@@ -2431,7 +2431,6 @@
           const callerId = call.callerId || (conv.participants || []).find(id => id !== currentUser.id);
           if (!callerId) continue;
 
-          // Se a conversa já está aberta com a mesma pessoa, o listener da conversa cuida da chamada.
           if (isSameActiveChatUser(callerId)) continue;
 
           handledGlobalIncomingCallIds[call.id] = true;
@@ -2458,7 +2457,6 @@
 
             await openChat(incomingContact);
 
-            // Reforço visual/sonoro: se o listener da conversa demorar um pouco, mostra a chamada mesmo assim.
             if (!currentCallId) {
               currentCallId = call.id;
               currentCallRole = "receiver";
@@ -2494,7 +2492,6 @@
       activeCallUnsubscribe = null;
     }
   }
-
 
   function callTypeLabel(type = currentCallMediaType) {
     return type === "video" ? "vídeo" : "áudio";
@@ -2583,8 +2580,6 @@
         cameraBtn.innerText = "🔄 Trocando...";
       }
 
-      // Primeiro tenta abrir a outra câmera sem mexer na chamada atual.
-      // Assim, se o celular não liberar troca, a ligação não cai.
       newStream = await getCameraStreamByFacing(nextFacing);
       const newVideoTrack = newStream.getVideoTracks()[0];
       if (!newVideoTrack) throw new Error("Não foi possível abrir a outra câmera.");
@@ -2605,13 +2600,13 @@
 
       callVideoFacingMode = nextFacing;
       attachLocalVideoPreview();
-      showToast(callVideoFacingMode === "user" ? "Câmera frontal ativada." : "Câmera traseira ativada.", "success");
+      showToast("Câmera alterada.", "success");
     } catch (error) {
       console.error("Erro ao virar câmera:", error);
       try {
         if (newStream) newStream.getTracks().forEach(track => track.stop());
       } catch (e) {}
-      alert("Este celular/navegador não conseguiu trocar a câmera agora. A ligação continua normal.");
+      alert("Não foi possível alternar a câmera. A ligação continua normal.");
     } finally {
       if (cameraBtn) cameraBtn.disabled = false;
       updateCallMediaButtons();
@@ -2674,13 +2669,13 @@
     applyCallAudioSettings();
 
     if (callAudioMode === "low") {
-      showToast("Modo baixo ativado. Aproxime o celular do ouvido e ajuste o volume físico.", "info");
+      showToast("Modo fone de ouvido ativado.", "info");
     } else {
       showToast("Alto-falante ativado.", "info");
     }
   }
 
-  function setCallOverlay({ mode, title, subtitle, showAccept = false, showDecline = false, showEnd = true, callType = currentCallMediaType }) {
+  function setCallOverlay({ title, subtitle, showAccept = false, showDecline = false, showEnd = true, callType = currentCallMediaType }) {
     const overlay = document.getElementById("callOverlay");
     const avatar = document.getElementById("callAvatar");
     const titleEl = document.getElementById("callTitle");
@@ -2718,7 +2713,7 @@
   async function ensureLocalCallStream(type = currentCallMediaType) {
     if (localCallStream) return localCallStream;
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      throw new Error("Este navegador não permite ligação de " + callTypeLabel(type) + ".");
+      throw new Error("Este navegador não suporta conexões de mídia.");
     }
     const constraints = type === "video"
       ? { audio: true, video: { facingMode: { ideal: callVideoFacingMode }, width: { ideal: 640 }, height: { ideal: 480 } } }
@@ -2756,7 +2751,7 @@
     pc.onconnectionstatechange = () => {
       if (["failed", "closed", "disconnected"].includes(pc.connectionState)) {
         const sub = document.getElementById("callSubtitle");
-        if (sub && currentCallId) sub.innerText = "Conexão encerrada ou instável.";
+        if (sub && currentCallId) sub.innerText = "Conexão encerrada.";
       }
     };
 
@@ -2808,7 +2803,7 @@
 
       setCallOverlay({
         title: "Chamando " + callContactName(),
-        subtitle: "Aguardando a pessoa atender...",
+        subtitle: "Aguardando atendimento...",
         showEnd: true,
         callType: type
       });
@@ -2837,7 +2832,7 @@
       await db.collection("conversations").doc(meta.conversationId).set({ activeCall: callData }, { merge: true });
     } catch (error) {
       console.error("Erro ao iniciar ligação:", error);
-      alert(error.message || "Não foi possível iniciar a ligação de " + callTypeLabel(type) + ".");
+      alert(error.message || "Não foi possível iniciar a chamada.");
       await cleanupAudioCall(false);
     }
   }
@@ -2861,9 +2856,8 @@
       currentCallMediaType = call.type || "audio";
 
       if ((call.status === "ended" || call.status === "declined") && currentCallId === call.id) {
-        const wasDeclined = call.status === "declined";
         await cleanupAudioCall(false);
-        if (wasDeclined) alert("Ligação recusada ou encerrada.");
+        alert("Chamada encerrada.");
         return;
       }
 
@@ -2874,7 +2868,7 @@
         remoteDescriptionApplied = false;
         setCallOverlay({
           title: "Ligação de " + callTypeLabel(call.type) + " de " + (call.callerName || callContactName()),
-          subtitle: "Chamada de " + callTypeLabel(call.type) + " recebida",
+          subtitle: "Chamada recebida",
           showAccept: true,
           showDecline: true,
           showEnd: false,
@@ -2887,20 +2881,11 @@
       if (call.status === "accepted" && currentCallId === call.id) {
         setCallOverlay({
           title: "Em ligação com " + callContactName(),
-          subtitle: "Ligação de " + callTypeLabel(call.type) + " ativa",
+          subtitle: "Chamada ativa",
           showEnd: true,
           callType: call.type || "audio"
         });
         await applyRemoteCallData(call);
-      }
-
-      if (call.status === "ringing" && currentCallId === call.id && currentCallRole === "caller") {
-        setCallOverlay({
-          title: "Chamando " + callContactName(),
-          subtitle: "Aguardando a pessoa atender...",
-          showEnd: true,
-          callType: call.type || "audio"
-        });
       }
     }, error => console.error("Erro ouvindo ligação:", error));
   }
@@ -2913,7 +2898,7 @@
     try {
       stopCallRingtone();
       currentCallMediaType = currentCallData.type || "audio";
-      setCallOverlay({ title: "Atendendo...", subtitle: "Conectando " + callTypeLabel(currentCallMediaType) + "...", showEnd: true, callType: currentCallMediaType });
+      setCallOverlay({ title: "Conectando...", subtitle: "Iniciando transmissão...", showEnd: true, callType: currentCallMediaType });
       const pc = createAudioPeerConnection("receiver");
       await addLocalTracksToPeer(pc, currentCallMediaType);
       await pc.setRemoteDescription(new RTCSessionDescription(currentCallData.offer));
@@ -2933,7 +2918,7 @@
       });
     } catch (error) {
       console.error("Erro ao atender ligação:", error);
-      alert(error.message || "Não foi possível atender a ligação.");
+      alert("Não foi possível conectar a chamada.");
       await endCurrentAudioCall();
     }
   }
@@ -2984,7 +2969,7 @@
         await currentPeerConnection.addIceCandidate(new RTCIceCandidate(candidate));
       }
     } catch (error) {
-      console.error("Erro ao aplicar dados remotos da chamada:", error);
+      console.error("Erro ao aplicar dados remotos:", error);
     }
   }
 
@@ -3101,7 +3086,7 @@
           at: Date.now()
         }, { merge: true });
     } catch (error) {
-      console.error("Erro ao atualizar digitando:", error);
+      console.error("Erro ao atualizar status digitando:", error);
     }
   }
 
@@ -3477,7 +3462,7 @@
 
     if (!message || message.deleted || message.type !== "text") {
       closeMessageMenu();
-      return alert("Só é possível copiar mensagens de texto.");
+      return alert("Apenas mensagens de texto podem ser copiadas.");
     }
 
     try {
@@ -3500,11 +3485,11 @@
     const message = currentMessagesCache.find(m => m.id === messageId);
 
     if (!message || message.deleted || message.type !== "image") {
-      return alert("Imagem não encontrada para salvar.");
+      return alert("Imagem não encontrada.");
     }
 
     const imageData = message.imageData || message.imageUrl || "";
-    if (!imageData) return alert("Imagem não encontrada para salvar.");
+    if (!imageData) return alert("Imagem inválida.");
 
     try {
       const link = document.createElement("a");
@@ -3516,7 +3501,7 @@
       document.body.removeChild(link);
     } catch (error) {
       console.error("Erro ao salvar imagem:", error);
-      alert("Não foi possível salvar automaticamente. Toque na foto, segure e escolha salvar imagem.");
+      alert("Por favor, toque e segure na imagem para salvar manualmente.");
     }
   }
 
@@ -3539,11 +3524,11 @@
     const message = currentMessagesCache.find(m => m.id === messageId);
 
     if (!message || message.deleted || message.type !== "audio") {
-      return alert("Áudio não encontrado para salvar.");
+      return alert("Áudio não encontrado.");
     }
 
     const audioData = message.audioData || "";
-    if (!audioData) return alert("Áudio não encontrado para salvar.");
+    if (!audioData) return alert("Áudio inválido.");
 
     try {
       const link = document.createElement("a");
@@ -3555,7 +3540,7 @@
       document.body.removeChild(link);
     } catch (error) {
       console.error("Erro ao salvar áudio:", error);
-      alert("Não foi possível salvar automaticamente. Abra o áudio e tente baixar pelo navegador.");
+      alert("Baixe o áudio diretamente pelos controles do player.");
     }
   }
 
@@ -3600,7 +3585,7 @@
       closeMessageMenu();
     } catch (error) {
       console.error("Erro ao favoritar:", error);
-      alert("Não foi possível atualizar favorito.");
+      alert("Erro ao processar favorito.");
     }
   }
 
@@ -3676,8 +3661,8 @@
       return alert("Não foi possível localizar a mensagem.");
     }
 
-    if (message.senderId !== currentUser.id) return alert("Você só pode editar mensagens que você enviou.");
-    if (message.deleted || message.type !== "text") return alert("Só é possível editar mensagens de texto.");
+    if (message.senderId !== currentUser.id) return alert("Você só pode editar suas próprias mensagens.");
+    if (message.deleted || message.type !== "text") return alert("Apenas mensagens de texto podem ser editadas.");
 
     cancelReply();
 
@@ -3732,7 +3717,7 @@
     const newText = input.value.trim();
 
     if (!editingMessageId || !activeChat) return;
-    if (!newText) return alert("A mensagem editada não pode ficar vazia.");
+    if (!newText) return alert("O texto editado não pode ficar vazio.");
 
     const message = currentMessagesCache.find(m => m.id === editingMessageId);
     if (!message) return alert("Mensagem não encontrada.");
@@ -3743,7 +3728,7 @@
       return;
     }
 
-    if (!firebaseReady || !db) return alert("Firebase ainda não está conectado.");
+    if (!firebaseReady || !db) return alert("O Firebase não está conectado.");
 
     const otherId = activeChat.contactUserId || ("user_" + activeChat.phone);
     const conversationId = getConversationId(currentUser.id, otherId);
@@ -3773,8 +3758,8 @@
       cancelEdit();
       playMessageSound();
     } catch (error) {
-      console.error("Erro ao editar mensagem:", error);
-      alert("Não foi possível editar a mensagem.");
+      console.error("Erro ao salvar edição:", error);
+      alert("Não foi possível salvar as alterações.");
     }
   }
 
@@ -3790,7 +3775,7 @@
 
     if (message.deleted || message.type === "deleted") {
       closeMessageMenu();
-      return alert("Não é possível encaminhar mensagem apagada.");
+      return alert("Não é possível encaminhar mensagens apagadas.");
     }
 
     forwardMessageData = {
@@ -3845,7 +3830,7 @@
     if (!forwardMessageData) return;
 
     const contact = JSON.parse(decodeURIComponent(encodedContact));
-    const ok = confirm("Encaminhar mensagem para " + (contact.name || contact.savedName || "Contato") + "?");
+    const ok = confirm("Encaminhar para " + (contact.name || contact.savedName || "Contato") + "?");
 
     if (!ok) return;
 
@@ -3857,13 +3842,13 @@
       alert("Mensagem encaminhada.");
     } catch (error) {
       console.error("Erro ao encaminhar:", error);
-      alert("Não foi possível encaminhar a mensagem.");
+      alert("Falha no encaminhamento.");
       isForwarding = false;
     }
   }
 
   async function createForwardedMessage(contact, source) {
-    if (!currentUser || !firebaseReady || !db) throw new Error("Firebase não conectado.");
+    if (!currentUser || !firebaseReady || !db) throw new Error("Firebase indisponível.");
 
     const otherId = contact.contactUserId || ("user_" + contact.phone);
     const conversationId = getConversationId(currentUser.id, otherId);
@@ -3941,7 +3926,7 @@
       try {
         await messageRef.set({ deliveredAt: Date.now() }, { merge: true });
       } catch (error) {
-        console.error("Erro ao marcar encaminhada como entregue:", error);
+        console.error("Erro ao registrar recebimento:", error);
       }
     }, 600);
 
@@ -3956,7 +3941,7 @@
   async function deleteMessageForMe() {
     if (!selectedMessageId || !activeChat || !firebaseReady || !db) return;
 
-    const ok = confirm("Apagar esta mensagem só para você?");
+    const ok = confirm("Remover esta mensagem da sua visualização?");
     if (!ok) return;
 
     const otherId = activeChat.contactUserId || ("user_" + activeChat.phone);
@@ -3973,8 +3958,8 @@
 
       closeMessageMenu();
     } catch (error) {
-      console.error("Erro ao apagar só para mim:", error);
-      alert("Não foi possível apagar a mensagem.");
+      console.error("Erro ao apagar mensagem localmente:", error);
+      alert("Não foi possível processar a exclusão.");
     }
   }
 
@@ -3982,11 +3967,11 @@
     if (!selectedMessageId || !activeChat || !firebaseReady || !db) return;
 
     if (!selectedMessageMine) {
-      alert("Você só pode apagar para todos as mensagens que você enviou.");
+      alert("Você só pode apagar mensagens de sua autoria.");
       return;
     }
 
-    const ok = confirm("Apagar esta mensagem para todos?");
+    const ok = confirm("Apagar esta mensagem para todos os participantes?");
     if (!ok) return;
 
     const otherId = activeChat.contactUserId || ("user_" + activeChat.phone);
@@ -4020,19 +4005,16 @@
 
       closeMessageMenu();
     } catch (error) {
-      console.error("Erro ao apagar para todos:", error);
-      alert("Não foi possível apagar para todos.");
+      console.error("Erro ao deletar globalmente:", error);
+      alert("Falha ao deletar a mensagem.");
     }
   }
-
 
   async function clearActiveConversationUnfavorited() {
     if (!activeChat || !currentUser) return;
 
     const ok = confirm(
-      "Limpar esta conversa?\n\n" +
-      "Isso vai apagar definitivamente do banco todas as mensagens NÃO favoritadas desta conversa.\n\n" +
-      "Mensagens favoritadas serão preservadas."
+      "Limpar conversa?\n\nTodas as mensagens não favoritadas serão apagadas permanentemente do servidor."
     );
 
     if (!ok) return;
@@ -4046,7 +4028,7 @@
         const snap = await convRef.collection("messages").get();
 
         if (snap.empty) {
-          alert("Não há mensagens para limpar nesta conversa.");
+          alert("Não há mensagens para limpar.");
           return;
         }
 
@@ -4061,7 +4043,7 @@
         });
 
         if (!docsToDelete.length) {
-          alert("Todas as mensagens desta conversa estão favoritadas. Nada foi apagado.");
+          alert("Nenhuma mensagem foi apagada, pois todas estão favoritadas.");
           return;
         }
 
@@ -4092,7 +4074,7 @@
           }, { merge: true });
         }
 
-        alert("Conversa limpa. Mensagens favoritadas foram preservadas.");
+        alert("Conversa limpa. Mensagens salvas nas favoritas foram preservadas.");
       } else {
         const data = loadLocal();
         const messages = data.messages?.[conversationId] || [];
@@ -4101,11 +4083,11 @@
         saveLocal(data);
         currentMessagesCache = kept;
         renderMessages(kept);
-        alert("Conversa limpa neste aparelho.");
+        alert("Conversa limpa localmente.");
       }
     } catch (error) {
-      console.error("Erro ao limpar conversa:", error);
-      alert("Não foi possível limpar a conversa agora.");
+      console.error("Erro ao limpar histórico:", error);
+      alert("Não foi possível limpar o histórico agora.");
     }
   }
 
@@ -4147,13 +4129,13 @@
           title: "Nova mensagem de " + currentUser.name,
           body: messageText,
           url: deepLinkUrl
-        })
+        } || {})
       });
 
       const result = await response.json();
       console.log("Resultado da notificação:", result);
     } catch (error) {
-      console.error("Erro ao enviar push notification:", error);
+      console.error("Erro ao despachar push notification:", error);
     }
   }
 
@@ -4184,8 +4166,8 @@
   }
 
   function openImageSourceMenu() {
-    if (editingMessageId) return alert("Finalize ou cancele a edição antes de enviar imagem.");
-    if (!activeChat) return alert("Abra uma conversa primeiro.");
+    if (editingMessageId) return alert("Cancele a edição antes de anexar uma foto.");
+    if (!activeChat) return alert("Nenhuma conversa ativa selecionada.");
     document.getElementById("imageSourceMenu").classList.add("active");
   }
 
@@ -4207,42 +4189,42 @@
   }
 
   async function handleImageSelected(event) {
-    if (editingMessageId) return alert("Finalize ou cancele a edição antes de enviar imagem.");
+    if (editingMessageId) return alert("Finalize a edição em andamento primeiro.");
 
     const file = event.target.files && event.target.files[0];
     event.target.value = "";
 
     if (!file) return;
-    if (!activeChat) return alert("Abra uma conversa primeiro.");
-    if (!firebaseReady || !db) return alert("O Firebase ainda não está conectado.");
-    if (!file.type.startsWith("image/")) return alert("Escolha apenas imagem ou foto.");
-    if (isUploadingImage) return alert("Aguarde o envio da imagem anterior terminar.");
+    if (!activeChat) return alert("Por favor, selecione um chat.");
+    if (!firebaseReady || !db) return alert("Conexão com servidor indisponível.");
+    if (!file.type.startsWith("image/")) return alert("Formato de arquivo não suportado.");
+    if (isUploadingImage) return alert("Processamento anterior em andamento.");
 
     await setTypingStatus(false);
 
     isUploadingImage = true;
-    showUploadingMessage("Comprimindo imagem...");
+    showUploadingMessage("Comprimindo arquivo...");
 
     const timeout = setTimeout(() => {
       if (isUploadingImage) {
         removeTempUploadMessage();
         isUploadingImage = false;
-        alert("O envio demorou demais. Tente uma imagem menor ou tire um print mais leve.");
+        alert("O upload expirou. Reduza a resolução ou tente novamente.");
       }
     }, 25000);
 
     try {
       const compressedImage = await compressImageToBase64(file, 760, 0.55);
 
-      if (!compressedImage || compressedImage.length < 100) throw new Error("Falha ao comprimir imagem.");
+      if (!compressedImage || compressedImage.length < 100) throw new Error("Falha na otimização.");
 
       const approxKb = Math.round((compressedImage.length * 3 / 4) / 1024);
 
       if (compressedImage.length > 820000) {
-        throw new Error("A imagem ainda ficou grande demais após compressão. Tente outra foto menor.");
+        throw new Error("Arquivo excede as dimensões de segurança.");
       }
 
-      showUploadingMessage("Enviando imagem... " + approxKb + " KB");
+      showUploadingMessage("Enviando mídia... " + approxKb + " KB");
 
       await createMessage({
         type: "image",
@@ -4255,8 +4237,8 @@
       cancelReply();
       playMessageSound();
     } catch (error) {
-      console.error("Erro ao enviar imagem:", error);
-      alert(error.message || "Não foi possível enviar a imagem.");
+      console.error("Erro de envio:", error);
+      alert(error.message || "Não foi possível carregar a imagem.");
     } finally {
       clearTimeout(timeout);
       isUploadingImage = false;
@@ -4265,14 +4247,14 @@
   }
 
   async function startAudioRecording() {
-    if (editingMessageId) return alert("Finalize ou cancele a edição antes de gravar áudio.");
+    if (editingMessageId) return alert("Conclua a edição antes de gravar.");
 
-    if (!activeChat) return alert("Abra uma conversa primeiro.");
-    if (!firebaseReady || !db) return alert("O Firebase ainda não está conectado.");
+    if (!activeChat) return alert("Abra uma conversa.");
+    if (!firebaseReady || !db) return alert("Aguardando sincronização com o banco.");
     if (isRecordingAudio) return;
 
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.MediaRecorder) {
-      alert("Este navegador não suporta gravação de áudio.");
+      alert("Seu navegador atual impede gravação nativa de áudio.");
       return;
     }
 
@@ -4316,8 +4298,8 @@
         if (isRecordingAudio) stopAudioRecording();
       }, 45000);
     } catch (error) {
-      console.error("Erro ao iniciar gravação:", error);
-      alert("Não foi possível acessar o microfone. Verifique a permissão do navegador.");
+      console.error("Erro de hardware de áudio:", error);
+      alert("Acesso ao microfone negado. Verifique as configurações do sistema.");
       cleanupAudioRecording();
     }
   }
@@ -4363,7 +4345,7 @@
 
     if (durationSeconds < 1) {
       audioChunks = [];
-      alert("Áudio muito curto.");
+      alert("Gravação descartada por tempo insuficiente.");
       return;
     }
 
@@ -4373,11 +4355,11 @@
       const mimeType = audioChunks[0]?.type || "audio/webm";
       const blob = new Blob(audioChunks, { type: mimeType });
 
-      if (blob.size > 650000) throw new Error("Áudio ficou grande demais. Grave até 45 segundos ou menos.");
+      if (blob.size > 650000) throw new Error("Áudio excedeu o tempo máximo permitido.");
 
       const audioData = await blobToBase64(blob);
 
-      if (audioData.length > 880000) throw new Error("Áudio ficou grande demais para o modo grátis. Grave um áudio mais curto.");
+      if (audioData.length > 880000) throw new Error("Falha no tamanho máximo da mensagem.");
 
       await createMessage({
         type: "audio",
@@ -4392,8 +4374,8 @@
       cancelReply();
       playMessageSound();
     } catch (error) {
-      console.error("Erro ao enviar áudio:", error);
-      alert(error.message || "Não foi possível enviar o áudio.");
+      console.error("Erro no upload de áudio:", error);
+      alert(error.message || "Falha no envio da mensagem de voz.");
     } finally {
       audioChunks = [];
       removeTempUploadMessage();
@@ -4429,7 +4411,7 @@
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onloadend = () => resolve(reader.result);
-      reader.onerror = () => reject(new Error("Não foi possível converter o áudio."));
+      reader.onerror = () => reject(new Error("Conversão corrompida."));
       reader.readAsDataURL(blob);
     });
   }
@@ -4503,14 +4485,14 @@
         };
 
         img.onerror = function() {
-          reject(new Error("Não foi possível ler a imagem."));
+          reject(new Error("Processamento impossível."));
         };
 
         img.src = event.target.result;
       };
 
       reader.onerror = function() {
-        reject(new Error("Não foi possível abrir o arquivo."));
+        reject(new Error("Leitura falhou."));
       };
 
       reader.readAsDataURL(file);
@@ -4627,14 +4609,14 @@
         try {
           await messageRef.set({ deliveredAt: Date.now() }, { merge: true });
         } catch (error) {
-          console.error("Erro ao marcar como entregue:", error);
+          console.error("Erro ao registrar entrega:", error);
         }
       }, 600);
 
       await sendPushNotificationToUser(
         otherId,
-        type === "image" ? "📷 Enviou uma imagem" :
-        type === "audio" ? "🎤 Enviou um áudio" :
+        type === "image" ? "📷 Mídia recebida" :
+        type === "audio" ? "🎤 Áudio recebido" :
         text
       );
     } else {
@@ -4743,28 +4725,28 @@
         }
       });
     } catch (e) {
-      console.error("Erro ao mostrar notificação local:", e);
+      console.error("Erro na notificação local:", e);
     }
   }
 
   async function requestNotificationPermission() {
-    if (!firebaseReady || !db || !currentUser) return alert("Firebase ainda não conectou. Aguarde alguns segundos e tente de novo.");
-    if (!("Notification" in window)) return alert("Erro técnico: Notification não existe neste navegador.");
-    if (!("serviceWorker" in navigator)) return alert("Erro técnico: Service Worker não existe neste navegador.");
-    if (!messaging) return alert("Erro técnico: Firebase Messaging não foi carregado neste navegador.");
+    if (!firebaseReady || !db || !currentUser) return alert("Aguarde o carregamento inicial do Firebase.");
+    if (!("Notification" in window)) return alert("Notificações não suportadas pelo navegador.");
+    if (!("serviceWorker" in navigator)) return alert("Service Worker ausente ou inativo.");
+    if (!messaging) return alert("Firebase Messaging desativado no ambiente atual.");
 
     try {
       const permission = await Notification.requestPermission();
 
       if (permission !== "granted") {
-        alert("Permissão não liberada. Status: " + permission);
+        alert("Acesso a notificações recusado pelo usuário.");
         return;
       }
 
       const registration = await forceRegisterFirebaseMessagingSW();
 
       if (!registration) {
-        alert("Não foi possível registrar o service worker de notificações.");
+        alert("Falha ao inicializar o manipulador de push background.");
         return;
       }
 
@@ -4774,7 +4756,7 @@
       });
 
       if (!token) {
-        alert("Erro técnico: o Firebase não retornou token.");
+        alert("Não foi possível adquirir o identificador de push.");
         return;
       }
 
@@ -4789,31 +4771,23 @@
 
       localStorage.setItem("zappi_push_token", token);
 
-      await registration.showNotification("Zappi Web ativado", {
-        body: "Este aparelho agora está pronto para receber notificações.",
+      await registration.showNotification("Zappi Web", {
+        body: "Notificações em tempo real configuradas com sucesso.",
         icon: "/icon-192.png",
         badge: "/icon-192.png",
         tag: "zappi-ativado",
         data: { url: "/" }
       });
 
-      alert("Notificações ativadas com sucesso neste aparelho.");
+      alert("Notificações ativadas.");
     } catch (error) {
-      console.error("ERRO DETALHADO AO ATIVAR NOTIFICAÇÕES:", error);
-
-      const code = error.code || "sem código";
-      const message = error.message || "sem mensagem";
-
-      alert(
-        "Erro técnico ao ativar notificações:\n\n" +
-        "Código: " + code + "\n\n" +
-        "Mensagem: " + message
-      );
+      console.error("Erro crítico na ativação do Push:", error);
+      alert("Erro na ativação das notificações: " + (error.message || "Desconhecido"));
     }
   }
 
   async function logout() {
-    if (!confirm("Deseja sair deste perfil?")) return;
+    if (!confirm("Deseja encerrar a sessão?")) return;
 
     await setTypingStatus(false);
     await cleanupAudioCall(true);
@@ -4860,7 +4834,7 @@
 
   async function installApp() {
     if (!deferredInstallPrompt) {
-      alert("Se o botão automático não aparecer, use o menu do navegador e toque em 'Adicionar à tela inicial'.");
+      alert("Para instalar manualmente, acesse as opções do navegador e clique em 'Instalar aplicativo' ou 'Adicionar à tela de início'.");
       return;
     }
 
@@ -4921,92 +4895,5 @@
     await checkExistingProfile();
   })();
 </script>
-
-  <!-- LISTA DE CONVERSAS -->
-  <div id="sidebar">
-    <div class="chat-item" onclick="openChat('chat_1')">João</div>
-    <div class="chat-item" onclick="openChat('chat_2')">Maria</div>
-  </div>
-
-  <!-- CHAT -->
-  <div id="chat">
-
-    <div id="messages"></div>
-
-    <div id="inputBox">
-      <input id="text" placeholder="Digite sua mensagem..." />
-      <button onclick="send()">Enviar</button>
-    </div>
-
-  </div>
-
-  <!-- FIREBASE + CHAT -->
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-app.js";
-    import { getDatabase, ref, push, onValue } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-database.js";
-
-    const firebaseConfig = {
-      apiKey: "SUA_API_KEY",
-      authDomain: "zappi-web.firebaseapp.com",
-      databaseURL: "https://zappi-web-default-rtdb.firebaseio.com",
-      projectId: "zappi-web",
-    };
-
-    const app = initializeApp(firebaseConfig);
-    const db = getDatabase(app);
-
-    let currentChat = "chat_1";
-
-    // ABRIR CHAT
-    window.openChat = function(chatId) {
-      currentChat = chatId;
-      loadChat();
-    }
-
-    // ENVIAR MENSAGEM
-    window.send = function () {
-      const text = document.getElementById("text").value;
-
-      if (!text) return;
-
-      push(ref(db, "chats/" + currentChat + "/messages"), {
-        text,
-        sender: "me",
-        time: Date.now()
-      });
-
-      document.getElementById("text").value = "";
-    }
-
-    // CARREGAR MENSAGENS
-    function loadChat() {
-      onValue(ref(db, "chats/" + currentChat + "/messages"), (snap) => {
-        const data = snap.val();
-        const box = document.getElementById("messages");
-
-        box.innerHTML = "";
-
-        for (let id in data) {
-          const msg = data[id];
-
-          const div = document.createElement("div");
-          div.classList.add("msg");
-
-          div.classList.add(msg.sender === "me" ? "me" : "other");
-
-          div.innerText = msg.text;
-
-          box.appendChild(div);
-        }
-
-        box.scrollTop = box.scrollHeight;
-      });
-    }
-
-    // iniciar
-    loadChat();
-
-  </script>
-
 </body>
 </html>
