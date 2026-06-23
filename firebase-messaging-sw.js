@@ -1,95 +1,87 @@
-importScripts("https://www.gstatic.com/firebasejs/10.12.4/firebase-app-compat.js");
-importScripts("https://www.gstatic.com/firebasejs/10.12.4/firebase-messaging-compat.js");
+importScripts("https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js");
+importScripts("https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging-compat.js");
 
 firebase.initializeApp({
-  apiKey: "AIzaSyBXQJGJPREafTPDIpbzDSSov2Ju3kvei3w",
-  authDomain: "zappi-web.firebaseapp.com",
-  projectId: "zappi-web",
-  storageBucket: "zappi-web.firebasestorage.app",
-  messagingSenderId: "675790989502",
-  appId: "1:675790989502:web:36a7f3d1bcbb3bfb1b96ef"
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_AUTH_DOMAIN",
+  projectId: "YOUR_PROJECT_ID",
+  storageBucket: "YOUR_STORAGE_BUCKET",
+  messagingSenderId: "YOUR_SENDER_ID",
+  appId: "YOUR_APP_ID"
 });
 
 const messaging = firebase.messaging();
 
-/* =========================
-   BACKGROUND HANDLER FOR CALLS
-========================= */
+// 🔊 cria áudio global
+let audio = null;
 
-messaging.onBackgroundMessage((payload) => {
-  const data = payload.data || {};
+function playRingtone() {
+  try {
+    if (!audio) {
+      audio = new Audio("/ringtone.mp3");
+      audio.loop = true;
+      audio.volume = 1.0;
+    }
 
-  const isCall = data.type === "call";
+    audio.play().catch(() => {
+      // alguns browsers bloqueiam até interação
+    });
 
-  const title = isCall
-    ? "📞 Chamada recebida"
-    : (data.title || "Nova mensagem");
+  } catch (e) {
+    console.log("Erro ao tocar ringtone:", e);
+  }
+}
 
-  const body = data.body || "";
+function stopRingtone() {
+  if (audio) {
+    audio.pause();
+    audio.currentTime = 0;
+  }
+}
 
+// 📳 vibração contínua
+function vibrateCall() {
+  try {
+    if (navigator.vibrate) {
+      navigator.vibrate([1000, 500, 1000, 500, 1000, 500, 1000]);
+    }
+  } catch (e) {}
+}
+
+// 📩 quando chega mensagem em background
+messaging.onBackgroundMessage(function (payload) {
+  console.log("📞 CALL RECEBIDA:", payload);
+
+  const title = payload?.data?.title || "Chamada recebida";
+  const body = payload?.data?.body || "Toque para atender";
+
+  // 🔥 notificação estilo chamada
   self.registration.showNotification(title, {
     body: body,
     icon: "/icon-192.png",
     badge: "/icon-192.png",
-
-    // 🔥 ESSENCIAL PARA NÃO “SUMIR”
     requireInteraction: true,
-
-    // 🔥 NÃO SILENCIAR
     silent: false,
-
-    // 🔥 TAG EVITA AGRUPAR ERRADO
-    tag: isCall ? "incoming-call" : "message",
-
-    renotify: true,
-
-    // 🔥 VIBRAÇÃO FORTE ESTILO CHAMADA
-    vibrate: isCall
-      ? [
-          800, 200,
-          800, 200,
-          800, 200,
-          1000
-        ]
-      : [
-          300
-        ],
-
-    data: {
-      url: data.url || "/",
-      type: data.type
-    }
+    vibrate: [1000, 500, 1000, 500, 1000],
+    data: payload?.data || {}
   });
+
+  // 🔊 tenta tocar ringtone
+  playRingtone();
+
+  // 📳 vibra
+  vibrateCall();
 });
 
-/* =========================
-   CLICK NA NOTIFICAÇÃO
-========================= */
-
+// 👆 quando usuário clica na notificação
 self.addEventListener("notificationclick", function (event) {
   event.notification.close();
 
-  const data = event.notification.data || {};
-  const url = data.url || "/";
+  stopRingtone();
+
+  const url = event.notification.data?.url || "/";
 
   event.waitUntil(
-    (async () => {
-      const allClients = await clients.matchAll({
-        type: "window",
-        includeUncontrolled: true
-      });
-
-      for (const client of allClients) {
-        if (client.url.includes(self.location.origin) && "focus" in client) {
-          client.focus();
-          client.navigate(url);
-          return;
-        }
-      }
-
-      if (clients.openWindow) {
-        return clients.openWindow(url);
-      }
-    })()
+    clients.openWindow(url)
   );
 });
