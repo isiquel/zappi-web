@@ -4940,8 +4940,29 @@ function renderGroupsInConversationList(){
 function openCreateGroupModal(){
   const nome = prompt("Nome do grupo:");
   if(!nome) return;
+
   createGroupWithUsers(nome, []);
+
+  try{
+    const grupos = JSON.parse(localStorage.getItem("zappi_groups") || "[]");
+    grupos.unshift({
+      id:"group_"+Date.now(),
+      name:nome,
+      createdAt:Date.now()
+    });
+    localStorage.setItem("zappi_groups", JSON.stringify(grupos));
+  }catch(e){}
 }
+
+window.addEventListener("load", ()=>{
+  try{
+    const grupos = JSON.parse(localStorage.getItem("zappi_groups") || "[]");
+    if(Array.isArray(grupos) && grupos.length){
+      window.zappiGroups = grupos;
+      renderGroupsInConversationList();
+    }
+  }catch(e){}
+});
 </script>
 
 </body>
