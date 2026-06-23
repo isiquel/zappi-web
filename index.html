@@ -1945,7 +1945,6 @@
       <div class="small-actions" style="margin-bottom:14px;">
         <button class="btn-light" onclick="renderChats()">Atualizar conversas</button>
         <button class="btn-primary" onclick="openTab('contacts')">Adicionar contato</button>
-        <button class="btn-primary" onclick="openCreateGroupModal()">👥 Novo grupo</button>
       </div>
 
       <div class="section-title">Conversas recentes</div>
@@ -4915,6 +4914,24 @@ async function createGroupWithUsers(groupName, users=[]){
     updatedAt:Date.now(),
     lastMessage:""
   };
+
+  try{
+    if(window.db){
+      const ref = await db.collection("groups").add({
+        name: groupName,
+        ownerId: currentUser?.id || "",
+        participants: [currentUser?.id,...users].filter(Boolean),
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        lastMessage: ""
+      });
+
+      group.id = ref.id;
+    }
+  }catch(err){
+    console.error("Erro ao criar grupo no Firebase:", err);
+  }
+
   window.zappiGroups.unshift(group);
   saveGroups();
   renderGroupsInConversationList();
