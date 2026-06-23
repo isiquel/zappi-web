@@ -2829,7 +2829,50 @@
         receiverCandidates: []
       };
 
-      await db.collection("conversations").doc(meta.conversationId).set({ activeCall: callData }, { merge: true });
+      await db.collection("conversations")
+  .doc(meta.conversationId)
+  .set({ activeCall: callData }, { merge: true });
+
+try {
+
+  const userDoc = await db
+    .collection("users")
+    .doc(meta.otherId)
+    .get();
+
+  const userData = userDoc.exists ? userDoc.data() : {};
+
+  const tokens = Array.isArray(userData.pushTokens)
+    ? userData.pushTokens
+    : [];
+
+  if (tokens.length) {
+
+    await fetch("/api/sendNotification", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        tokens,
+        title: type === "video"
+          ? "📹 Chamada de vídeo"
+          : "📞 Chamada de voz",
+        body: (currentUser.name || "Contato") + " está ligando para você",
+        url: "/"
+      })
+    });
+
+  }
+
+} catch (err) {
+
+  console.error(
+    "Erro ao enviar push da chamada:",
+    err
+  );
+
+}
     } catch (error) {
       console.error("Erro ao iniciar ligação:", error);
       alert(error.message || "Não foi possível iniciar a chamada.");
