@@ -1590,14 +1590,14 @@
         return cId === sender.id;
       });
 
-      const contactToOpen = savedContact || {
-        name: sender.name || "Contato",
-        savedName: sender.name || "Contato",
-        phone: sender.phone || "",
-        contactUserId: sender.id,
-        photoUrl: sender.photoUrl || "",
-        photoData: sender.photoData || ""
-      };
+      const contactToOpen = {
+  name: sender.name || savedContact?.name || "Contato",
+  savedName: sender.name || savedContact?.name || "Contato",
+  phone: sender.phone || savedContact?.phone || "",
+  contactUserId: sender.id,
+  photoUrl: sender.photoUrl || savedContact?.photoUrl || "",
+  photoData: sender.photoData || savedContact?.photoData || ""
+};
 
       openChat(contactToOpen);
 
