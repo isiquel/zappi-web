@@ -1,34 +1,62 @@
 importScripts("https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js");
 importScripts("https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging-compat.js");
 
-// Inicialize com cuidado! Não exponha suas chaves aqui se o seu repositório for público.
+// Firebase real do seu projeto
 firebase.initializeApp({
-  apiKey: "SUA_API_KEY",
-  authDomain: "SEU_AUTH_DOMAIN",
-  projectId: "SEU_PROJECT_ID",
-  storageBucket: "SEU_STORAGE_BUCKET",
-  messagingSenderId: "SEU_SENDER_ID",
-  appId: "SEU_APP_ID"
+  apiKey: "AIzaSyBXQJGJPREafTPDIpbzDSSov2Ju3kvei3w",
+  authDomain: "zappi-web.firebaseapp.com",
+  projectId: "zappi-web",
+  storageBucket: "zappi-web.firebasestorage.app",
+  messagingSenderId: "675790989502",
+  appId: "1:675790989502:web:36a7f3d1bcbb3bfb1b96ef"
 });
 
 const messaging = firebase.messaging();
 
-messaging.onBackgroundMessage(function (payload) {
-  console.log("Notificação recebida em background:", payload);
+// Recebe notificação em background
+messaging.onBackgroundMessage((payload) => {
+  console.log("Notificação recebida:", payload);
 
-  const notificationTitle = payload?.data?.title || "Nova mensagem";
+  const notificationTitle =
+    payload?.data?.title || "Nova mensagem";
+
   const notificationOptions = {
-    body: payload?.data?.body || "Você recebeu uma nova mensagem.",
-    icon: "/icon-192.png", // Certifique-se que este arquivo existe na raiz
+    body:
+      payload?.data?.body || "Você recebeu uma nova mensagem.",
+    icon: "/icon-192.png",
     badge: "/icon-192.png",
-    data: { url: payload?.data?.url || "/" }
+    data: {
+      url: payload?.data?.url || "/"
+    }
   };
 
-  self.registration.showNotification(notificationTitle, notificationOptions);
+  self.registration.showNotification(
+    notificationTitle,
+    notificationOptions
+  );
 });
 
-self.addEventListener("notificationclick", function (event) {
+// Quando clicar na notificação
+self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const url = event.notification.data?.url || "/";
-  event.waitUntil(clients.openWindow(url));
+
+  const targetUrl =
+    event.notification?.data?.url || "/";
+
+  event.waitUntil(
+    clients.matchAll({
+      type: "window",
+      includeUncontrolled: true
+    }).then((clientList) => {
+      for (const client of clientList) {
+        if (client.url.includes(targetUrl) && "focus" in client) {
+          return client.focus();
+        }
+      }
+
+      if (clients.openWindow) {
+        return clients.openWindow(targetUrl);
+      }
+    })
+  );
 });
